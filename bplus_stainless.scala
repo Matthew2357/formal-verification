@@ -29,12 +29,15 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]],  overrid
 }
 
 case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: BigInt) extends Node[V] {
-  // LeafNode-specific code
-  def search(key: BigInt) : Option[V] = {
-    require(isOrdered(keys))
-    keys.indexWhere(_==key)  match {
-          case -1 => None[V]()
-          case idx => Some(values(idx))
+  def search(key: BigInt): Option[V] = {
+    require(isOrdered(keys) && keys.length == values.length) // Ensure keys and values align
+    keys match {
+      case Nil() => None[V]()
+      case _ =>
+        val idx = keys.indexWhere(_ == key)
+        if (idx >= 0 && idx < values.length) Some[V](values(idx))
+        else None[V]()
+    }
   }
 }
-}
+

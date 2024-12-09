@@ -31,7 +31,7 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]],  overrid
 case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: BigInt) extends Node[V] {
   // LeafNode-specific code
   def search(key: BigInt) : Option[V] = {
-    //require(isOrdered(keys))
+    require(isOrdered(keys))
     keys.indexWhere(_==key)  match {
           case -1 => None[V]()
           case idx => Some(values(idx))

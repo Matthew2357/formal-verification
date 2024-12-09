@@ -41,3 +41,15 @@ case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: 
   }
 }
 
+object Tests {
+  val keys = List[BigInt](1, 2, 3, 4, 5)
+  val values = List("one", "two", "three", "four", "five")
+  val testLeaf = LeafNode[String](keys, values, 10)
+
+  def runTests(): Unit = {
+    assert(testLeaf.search(4) match {
+      case Some[String](value) => value == "four" // Compare the inner value
+      case None[String]()        => false           // Handle the case where the Option is empty
+    })
+  }
+}

@@ -46,10 +46,16 @@ object Tests {
   val values = List("one", "two", "three", "four", "five")
   val testLeaf = LeafNode[String](keys, values, 10)
 
-  def runTests(): Unit = {
-    assert(testLeaf.search(4) match {
-      case Some[String](value) => value == "four" // Compare the inner value
+  def searchTest(idx : BigInt, value: String): Boolean = {
+      testLeaf.search(idx) match {
+      case Some[String](foundValue) => foundValue == value // Compare the inner value
       case None[String]()        => false           // Handle the case where the Option is empty
-    })
+    }
+  }
+
+  def runTests(): Unit = {
+    assert(searchTest(4, "four"))
+    assert(!searchTest(4, "three"))
+    assert(!searchTest(6, "xxxxx"))
   }
 }

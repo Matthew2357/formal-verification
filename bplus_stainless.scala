@@ -3,37 +3,37 @@ import stainless.collection._
 import stainless.lang._
 import stainless.proof._
 
-def isOrdered[K: Ordering](list: List[K]): Boolean = {
-   // Get the Ordering for K
+def isOrdered(list: List[BigInt]): Boolean = {
+   
   list match {
     case Nil() => true  // Empty list or single-element list is always ordered
-    case head :: tail =>
+    case Cons(head, tail) =>
         tail match {
             case Nil() => true
             case h :: _ => // Ensure the condition properly returns a Boolean
-            implicitly[Ordering[K]].lt(head, h) && isOrdered(tail)
+            (head <= h) && isOrdered(tail)
 
         }
     
   }
 }
 
-sealed abstract class BPlusTree[K,V] {
+sealed abstract class BPlusTree[V] {
   val order: BigInt
 }
 
-sealed abstract class Node[K,V] extends BPlusTree[K,V] 
+sealed abstract class Node[V] extends BPlusTree[V] 
 
-case class InternalNode[K, V](keys: List[K], children: List[Node[K,V]], override val order: BigInt) extends Node[K, V] {
+case class InternalNode[V](keys: List[BigInt], children: List[Node[V]],  override val order: BigInt) extends Node[V] {
   // InternalNode-specific code
 }
 
-case class LeafNode[K: Ordering, V](keys: List[K], values: List[V], next: Option[Node[K, V]], override val order: BigInt) extends Node[K, V] {
+case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: BigInt) extends Node[V] {
   // LeafNode-specific code
-  def search(key: K) : Option[V] = {
-    require(isOrdered(keys))
-    keys.indexWhere(_==key) match {
-          case -1 => None.asInstanceOf[Option[V]]
+  def search(key: BigInt) : Option[V] = {
+    //require(isOrdered(keys))
+    keys.indexWhere(_==key)  match {
+          case -1 => None[V]()
           case idx => Some(values(idx))
   }
 }

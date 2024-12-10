@@ -4,7 +4,6 @@ import stainless.lang._
 import stainless.proof._
 
 def isOrdered(list: List[BigInt]): Boolean = {
-   
   list match {
     case Nil() => true  // Empty list or single-element list is always ordered
     case Cons(head, tail) =>
@@ -14,7 +13,6 @@ def isOrdered(list: List[BigInt]): Boolean = {
             (head <= h) && isOrdered(tail)
 
         }
-    
   }
 }
 
@@ -67,7 +65,6 @@ case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: 
             (newkeys, Cons(value, values))
           }else{
             val kv = getNewLists(key, value, tail, values.tail, ord-1)
-            
             (Cons(head, kv._1), Cons(values.head, kv._2))
           }
       }
@@ -75,13 +72,19 @@ case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: 
     val newlists = getNewLists(key, value, keys, values, order)
     LeafNode[V](newlists._1, newlists._2, order, next)
   }.ensuring(res => res.isGood())
-
 }
 
-object Tests {
-  val keys = List[BigInt](1, 2, 3, 4, 5)
-  val values = List("one", "two", "three", "four", "five")
+//insert with split
+//roadmap: separate the node, and then insert the new key where it's supposed to go
+
+object Tests{
+  val keys = List[BigInt](1, 2, 3, 4, 6)
+  val values = List("one", "two", "three", "four", "six")
   val testLeaf = LeafNode[String](keys, values, 10, None[LeafNode[String]]())
+  val order1 = List[BigInt](1,3,5,7,10)
+  val order2 = List[BigInt](4,1,2,6,10,9)
+  val order3 = List[BigInt](5,5,5,5,5,5,5,6)
+  val insert1 = List[BigInt](1,3,5,6,7,10)
 
   def searchTest(idx : BigInt, value: String): Boolean = {
       testLeaf.search(idx) match {
@@ -90,9 +93,19 @@ object Tests {
     }
   }
 
-  def runTests(): Unit = {
+  def searchTests(): Unit = {
     assert(searchTest(4, "four"))
     assert(!searchTest(4, "three"))
-    assert(!searchTest(6, "xxxxx"))
+    assert(!searchTest(7, "xxxxx"))
+  }
+
+  def orderTests(): Unit = {
+    assert(isOrdered(order1))
+    assert(!isOrdered(order2))
+    assert(isOrdered(order3))
+  }
+
+  def insertNoSplitTests(): Unit = {
+    assert(testLeaf.insertNoSplit(5, "five") ==  LeafNode[String](List[BigInt](1, 2, 3, 4, 5, 6), List("one", "two", "three", "four", "five", "six"), 10, None[LeafNode[String]]()))
   }
 }

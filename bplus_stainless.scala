@@ -28,9 +28,17 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]],  overrid
   // InternalNode-specific code
 }
 
-case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: BigInt) extends Node[V] {
+case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: BigInt, next: Option[LeafNode[V]]) extends Node[V] {
+
+  //make sure that conditions we need are met
+  def isGood(): Boolean =  {
+    isOrdered(keys) && keys.length == values.length && keys.length <= order && !keys.isEmpty
+  }
+
+
   def search(key: BigInt): Option[V] = {
-    require(isOrdered(keys) && keys.length == values.length) // Ensure keys and values align
+    //require(isOrdered(keys) && keys.length == values.length) // Ensure keys and values align
+    require(this.isGood())
     keys match {
       case Nil() => None[V]()
       case _ =>
@@ -39,12 +47,41 @@ case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: 
         else None[V]()
     }
   }
+
+  //how many keys in the leaf?
+  def size(): BigInt ={
+    require(this.isGood())
+    keys.length
+  }.ensuring(res => res <= order) 
+
+  //insert without split
+  def insertNoSplit(key: BigInt, value: V) : LeafNode[V] = {
+    require(this.isGood() && keys.length < order)
+    def getNewLists(key: BigInt, value: V, keys: List[BigInt], values : List[V], ord : BigInt) : (List[BigInt], List[V]) = {
+      require(values.length == keys.length && keys.length < ord && isOrdered(keys))
+      keys match {
+        case Nil() => (List(key), List(value))
+        case Cons(head, tail) => 
+          if(key <= head){
+            val newkeys = Cons(key, keys)
+            (newkeys, Cons(value, values))
+          }else{
+            val kv = getNewLists(key, value, tail, values.tail, ord-1)
+            
+            (Cons(head, kv._1), Cons(values.head, kv._2))
+          }
+      }
+    }.ensuring(res => res._1.length == res._2.length && res._1.length <= ord && isOrdered(res._1))
+    val newlists = getNewLists(key, value, keys, values, order)
+    LeafNode[V](newlists._1, newlists._2, order, next)
+  }.ensuring(res => res.isGood())
+
 }
 
 object Tests {
   val keys = List[BigInt](1, 2, 3, 4, 5)
   val values = List("one", "two", "three", "four", "five")
-  val testLeaf = LeafNode[String](keys, values, 10)
+  val testLeaf = LeafNode[String](keys, values, 10, None[LeafNode[String]]())
 
   def searchTest(idx : BigInt, value: String): Boolean = {
       testLeaf.search(idx) match {

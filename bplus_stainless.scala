@@ -62,7 +62,7 @@ case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: Bi
   
   //make sure that conditions we need are met
   def isGood(): Boolean =  {
-    isOrdered(keyValues.map(_._1)) && keyValues.length <= order && 2*keyValues.length >= order && order >= 1
+    isOrdered(keyValues.map(_._1)) && this.size() <= order && 2*this.size() >= order && order >= 1
   }
 
   def mapConcatProperty[A, B](l1: List[(A, B)], l2: List[(A, B)]): Unit = {
@@ -90,9 +90,8 @@ case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: Bi
 
   //how many keys in the leaf?
   def size(): BigInt ={
-    require(this.isGood())
     keyValues.length
-  }.ensuring(res => res <= order && 2*res >= order) 
+  }
   
   //helper function for insertion
   def getNewList(key: BigInt, value: V, kvs: List[(BigInt, V)], ord: BigInt) : List[(BigInt, V)] = {
@@ -118,11 +117,27 @@ case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: Bi
 
   //insert with split
   def insertSplit(key: BigInt, value: V) : (LeafNode[V], LeafNode[V]) = {
-    require(this.isGood() && keyValues.length == order)
+    require(this.isGood() && this.size() == order)
     val newlist = getNewList(key, value, keyValues, order+1)
+
+    //helper function that takes a list of length order+1 and splits it into two
+    //we could do without introducing steps, it is redundant
+    //it just makes my thinking a bit easier
+    //the intuition is to start with one list and one empty one, and transfer an element from one list to the other until we have two lists of the desired lengths
     def splitList(l1: List[(BigInt, V)], l2: List[(BigInt, V)], n: BigInt, steps: BigInt, m: BigInt) : (List[(BigInt, V)], List[(BigInt, V)]) = {
       //n -> total number of elements, m -> number we want to move from l2 to l1, steps -> number of steps left
-      require((l1++l2).length == n && isOrdered(l1.map(_._1)++l2.map(_._1)) && l1.length == m-steps && l2.length == n-(m-steps) && m <= n && steps <= m && m>0 && n>0 && steps>= 0) 
+      require(
+      (l1++l2).length == n && 
+      isOrdered(l1.map(_._1)++l2.map(_._1)) && 
+      l1.length == m-steps && 
+      l2.length == n-(m-steps) && 
+      m <= n && 
+      steps <= m && 
+      m>0 && 
+      n>0 && 
+      steps>= 0
+      ) 
+
       decreases(steps)
       if(steps==0){
         (l1, l2)
@@ -133,14 +148,37 @@ case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: Bi
         mapConcatProperty[BigInt, V](l1,List(h))
         splitList(l1++List(h), t, n, steps-1, m)
       }
-    }.ensuring(res => (res._1 ++ res._2).length == n && isOrdered(res._1.map(_._1) ++ res._2.map(_._1)) && res._1.length == m && res._2.length ==n-m&& m <= n && steps <= m && m>0 && n>0 && steps>= 0)
+
+    }.ensuring(
+    res => (res._1 ++ res._2).length == n && 
+    isOrdered(res._1.map(_._1) ++ res._2.map(_._1)) && 
+    res._1.length == m && res._2.length ==n-m && 
+    m <= n && 
+    steps <= m && 
+    m>0 && 
+    n>0 && 
+    steps>= 0
+    )
+
     val splitlist = splitList(Nil[(BigInt, V)](), newlist, order+1, (order/2)+1, (order/2)+1)
     sublistsAreOrdered(splitlist._1.map(_._1), splitlist._2.map(_._1))
     val lfnode2 = LeafNode[V](splitlist._2, order, this.next)
     val lfnode1 = LeafNode[V](splitlist._1, order, Some[LeafNode[V]](lfnode2))
     (lfnode1, lfnode2)
     //note: in scala rounding is always done towards zero, so (order+1)/2 is the same as ceil(order/2)
-    }.ensuring(res => res._1.isGood() && res._2.isGood() &&res._1.keyValues.length==(order/2)+1 && res._2.keyValues.length==(order+1)/2 && res._1.next == Some(res._2) && res._2.next == this.next) 
+    }.ensuring(
+    res => res._1.isGood() && 
+    res._2.isGood() &&
+    res._1.size()==(order/2)+1 && 
+    res._2.size()==(order+1)/2 && 
+    res._1.next == Some(res._2) && res._2.next == this.next
+    ) 
+    /*
+    def easyDelete(key: BigInt) : (LeafNode[V], Boolean) = {
+      require(this.size() > (order+1)/2 && this.isGood())
+      //TODO
+    }.ensuring(res=>this.isGood() && ((res._1.size() == this.size() && !res._2) || (res._1.size() == this.size() -1 && res._2)))
+    */
 }
 
 

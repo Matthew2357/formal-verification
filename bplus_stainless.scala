@@ -134,13 +134,13 @@ case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: Bi
         splitList(l1++List(h), t, n, steps-1, m)
       }
     }.ensuring(res => (res._1 ++ res._2).length == n && isOrdered(res._1.map(_._1) ++ res._2.map(_._1)) && res._1.length == m && res._2.length ==n-m&& m <= n && steps <= m && m>0 && n>0 && steps>= 0)
-    val splitlist = splitList(Nil[(BigInt, V)](), newlist, order+1, (order+1)/2, (order+1)/2)
+    val splitlist = splitList(Nil[(BigInt, V)](), newlist, order+1, (order/2)+1, (order/2)+1)
     sublistsAreOrdered(splitlist._1.map(_._1), splitlist._2.map(_._1))
     val lfnode2 = LeafNode[V](splitlist._2, order, this.next)
     val lfnode1 = LeafNode[V](splitlist._1, order, Some[LeafNode[V]](lfnode2))
-    assert(lfnode1.keyValues.length <= order)
     (lfnode1, lfnode2)
-    }.ensuring(res => res._1.isGood() && res._2.isGood() && res._1.next == Some(res._2) && res._2.next == this.next) 
+    //note: in scala rounding is always done towards zero, so (order+1)/2 is the same as ceil(order/2)
+    }.ensuring(res => res._1.isGood() && res._2.isGood() &&res._1.keyValues.length==(order/2)+1 && res._2.keyValues.length==(order+1)/2 && res._1.next == Some(res._2) && res._2.next == this.next) 
 }
 
 

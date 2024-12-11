@@ -1,5 +1,3 @@
-package shit
-
 import stainless.annotation._
 import stainless.collection._
 import stainless.lang._

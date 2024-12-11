@@ -48,6 +48,18 @@ def sublistsAreOrdered(l1: List[BigInt], l2: List[BigInt]) : Unit = {
   ltwoordered(l1, l2)
 }.ensuring(_=>isOrdered(l1) && isOrdered(l2))
 
+def mapConcatProperty[A, B](l1: List[(A, B)], l2: List[(A, B)]): Unit = {
+  decreases(l1)
+  (l1, l2) match {
+    case (Nil(), _) => ()
+    case (Cons(h1, t1), _) => mapConcatProperty(t1, l2)
+  }
+}.ensuring(_ => 
+  l1.map(_._1) ++ l2.map(_._1) == (l1 ++ l2).map(_._1)
+)
+
+//==========================End of helper functions================================================
+
 sealed abstract class BPlusTree[V] {
   val order: BigInt
 }
@@ -65,15 +77,7 @@ case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: Bi
     isOrdered(keyValues.map(_._1)) && this.size() <= order && 2*this.size() >= order && order >= 1
   }
 
-  def mapConcatProperty[A, B](l1: List[(A, B)], l2: List[(A, B)]): Unit = {
-  decreases(l1)
-  (l1, l2) match {
-    case (Nil(), _) => ()
-    case (Cons(h1, t1), _) => mapConcatProperty(t1, l2)
-  }
-}.ensuring(_ => 
-  l1.map(_._1) ++ l2.map(_._1) == (l1 ++ l2).map(_._1)
-)
+  
 
 
 

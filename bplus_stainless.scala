@@ -1,7 +1,12 @@
+package shit
+
 import stainless.annotation._
 import stainless.collection._
 import stainless.lang._
 import stainless.proof._
+import stainless.lang.Map.ToMapOps
+import stainless.collection.ListSpecs._
+
 
 def isOrdered(list: List[BigInt]): Boolean = {
   list match {
@@ -9,12 +14,41 @@ def isOrdered(list: List[BigInt]): Boolean = {
     case Cons(head, tail) =>
         tail match {
             case Nil() => true
-            case h :: _ => // Ensure the condition properly returns a Boolean
+            case Cons(h,_) => // Ensure the condition properly returns a Boolean
             (head <= h) && isOrdered(tail)
 
         }
   }
 }
+
+
+def sublistsAreOrdered(l1: List[BigInt], l2: List[BigInt]) : Unit = {
+  require(isOrdered(l1++l2))
+  def ltwoordered(l1: List[BigInt], l2: List[BigInt]) : Unit = {
+    require(isOrdered(l1++l2))
+    l1 match {
+    case Nil() => ()
+    case Cons(head, tail) => ltwoordered(tail, l2)
+    }
+  }.ensuring(_=>isOrdered(l2))
+
+  def loneordered(l1: List[BigInt], l2: List[BigInt]) : Unit = {
+    require(isOrdered(l1++l2))
+    l1 match {
+      case Nil() => ()
+      case Cons(head, tail) =>
+      tail match {
+        case Nil() => ()
+        case Cons(t1, t2) =>
+        assert(head <= t1)
+        loneordered(tail, l2)
+      }
+    }
+  }.ensuring(_=>isOrdered(l1))
+
+  loneordered(l1, l2)
+  ltwoordered(l1, l2)
+}.ensuring(_=>isOrdered(l1) && isOrdered(l2))
 
 sealed abstract class BPlusTree[V] {
   val order: BigInt
@@ -26,22 +60,32 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]],  overrid
   // InternalNode-specific code
 }
 
-case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: BigInt, next: Option[LeafNode[V]]) extends Node[V] {
-
+case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: BigInt, val next: Option[LeafNode[V]]) extends Node[V] {
+  
   //make sure that conditions we need are met
   def isGood(): Boolean =  {
-    isOrdered(keys) && keys.length == values.length && keys.length <= order && !keys.isEmpty
+    isOrdered(keyValues.map(_._1)) && keyValues.length <= order && 2*keyValues.length >= order && order >= 1
   }
+
+  def mapConcatProperty[A, B](l1: List[(A, B)], l2: List[(A, B)]): Unit = {
+  decreases(l1)
+  (l1, l2) match {
+    case (Nil(), _) => ()
+    case (Cons(h1, t1), _) => mapConcatProperty(t1, l2)
+  }
+}.ensuring(_ => 
+  l1.map(_._1) ++ l2.map(_._1) == (l1 ++ l2).map(_._1)
+)
+
 
 
   def search(key: BigInt): Option[V] = {
-    //require(isOrdered(keys) && keys.length == values.length) // Ensure keys and values align
     require(this.isGood())
-    keys match {
+    keyValues match {
       case Nil() => None[V]()
       case _ =>
-        val idx = keys.indexWhere(_ == key)
-        if (idx >= 0 && idx < values.length) Some[V](values(idx))
+        val idx = keyValues.map(_._1).indexWhere(_ == key)
+        if (idx >= 0 && idx < keyValues.length) Some[V](keyValues(idx)._2)
         else None[V]()
     }
   }
@@ -49,47 +93,74 @@ case class LeafNode[V](keys: List[BigInt], values: List[V], override val order: 
   //how many keys in the leaf?
   def size(): BigInt ={
     require(this.isGood())
-    keys.length
-  }.ensuring(res => res <= order) 
+    keyValues.length
+  }.ensuring(res => res <= order && 2*res >= order) 
+  
+  //helper function for insertion
+  def getNewList(key: BigInt, value: V, kvs: List[(BigInt, V)], ord: BigInt) : List[(BigInt, V)] = {
+    require(kvs.length < ord && isOrdered(kvs.map(_._1)))
+    kvs match {
+      case Nil() => List((key, value))
+      case Cons(head, tail) => 
+        if(key <= head._1){
+          Cons((key, value), kvs)
+        }else{
+          val kv = getNewList(key, value, tail, ord-1)
+          Cons(head, kv)
+        }
+    }
+  }.ensuring(res => res.length <= ord && res.length == kvs.length+1 && isOrdered(res.map(_._1)))
 
-  //insert without split
+  //insert in a leaf that is not full
   def insertNoSplit(key: BigInt, value: V) : LeafNode[V] = {
-    require(this.isGood() && keys.length < order)
-    def getNewLists(key: BigInt, value: V, keys: List[BigInt], values : List[V], ord : BigInt) : (List[BigInt], List[V]) = {
-      require(values.length == keys.length && keys.length < ord && isOrdered(keys))
-      keys match {
-        case Nil() => (List(key), List(value))
-        case Cons(head, tail) => 
-          if(key <= head){
-            val newkeys = Cons(key, keys)
-            (newkeys, Cons(value, values))
-          }else{
-            val kv = getNewLists(key, value, tail, values.tail, ord-1)
-            (Cons(head, kv._1), Cons(values.head, kv._2))
-          }
-      }
-    }.ensuring(res => res._1.length == res._2.length && res._1.length <= ord && isOrdered(res._1))
-    val newlists = getNewLists(key, value, keys, values, order)
-    LeafNode[V](newlists._1, newlists._2, order, next)
+    require(this.isGood() && keyValues.length < order)
+    val newlist = getNewList(key, value, keyValues, order)
+    LeafNode[V](newlist, order, next)
   }.ensuring(res => res.isGood())
+
+  //insert with split
+  def insertSplit(key: BigInt, value: V) : (LeafNode[V], LeafNode[V]) = {
+    require(this.isGood() && keyValues.length == order)
+    val newlist = getNewList(key, value, keyValues, order+1)
+    def splitList(l1: List[(BigInt, V)], l2: List[(BigInt, V)], n: BigInt, steps: BigInt, m: BigInt) : (List[(BigInt, V)], List[(BigInt, V)]) = {
+      //n -> total number of elements, m -> number we want to move from l2 to l1, steps -> number of steps left
+      require((l1++l2).length == n && isOrdered(l1.map(_._1)++l2.map(_._1)) && l1.length == m-steps && l2.length == n-(m-steps) && m <= n && steps <= m && m>0 && n>0 && steps>= 0) 
+      decreases(steps)
+      if(steps==0){
+        (l1, l2)
+      }else{
+        val h = l2.head
+        val t = l2.tail
+        appendAssoc(l1.map(_._1), List(h).map(_._1), t.map(_._1))
+        mapConcatProperty[BigInt, V](l1,List(h))
+        splitList(l1++List(h), t, n, steps-1, m)
+      }
+    }.ensuring(res => (res._1 ++ res._2).length == n && isOrdered(res._1.map(_._1) ++ res._2.map(_._1)) && res._1.length == m && res._2.length ==n-m&& m <= n && steps <= m && m>0 && n>0 && steps>= 0)
+    val splitlist = splitList(Nil[(BigInt, V)](), newlist, order+1, (order+1)/2, (order+1)/2)
+    sublistsAreOrdered(splitlist._1.map(_._1), splitlist._2.map(_._1))
+    val lfnode2 = LeafNode[V](splitlist._2, order, this.next)
+    val lfnode1 = LeafNode[V](splitlist._1, order, Some[LeafNode[V]](lfnode2))
+    assert(lfnode1.keyValues.length <= order)
+    (lfnode1, lfnode2)
+    }.ensuring(res => res._1.isGood() && res._2.isGood() && res._1.next == Some(res._2) && res._2.next == this.next) 
 }
 
-//insert with split
-//roadmap: separate the node, and then insert the new key where it's supposed to go
+
 
 object Tests{
-  val keys = List[BigInt](1, 2, 3, 4, 6)
-  val values = List("one", "two", "three", "four", "six")
-  val testLeaf = LeafNode[String](keys, values, 10, None[LeafNode[String]]())
+  val testLeaf = LeafNode[String](List[(BigInt, String)]((1, "one"), (2, "two"), (3, "three"), (4, "four"), (6, "six")), 10, None[LeafNode[String]]())
   val order1 = List[BigInt](1,3,5,7,10)
   val order2 = List[BigInt](4,1,2,6,10,9)
   val order3 = List[BigInt](5,5,5,5,5,5,5,6)
-  val insert1 = List[BigInt](1,3,5,6,7,10)
+  val testInsertLeaf = LeafNode[String](List[(BigInt, String)]((1, "one"), (2, "two"), (3, "three"), (4, "four"), (6, "six"), (7, "seven")), 6, None[LeafNode[String]]())
+  val testInsertLeaf2 = LeafNode[String](List[(BigInt, String)]((4, "four"), (5, "five"), (6, "six")), 6, None[LeafNode[String]]())
+  val testInsertLeaf1 = LeafNode[String](List[(BigInt, String)]((1, "one"), (2, "two"), (3, "three"), (4, "four")), 6, Some[LeafNode[String]](testInsertLeaf2))
+
 
   def searchTest(idx : BigInt, value: String): Boolean = {
       testLeaf.search(idx) match {
-      case Some[String](foundValue) => foundValue == value // Compare the inner value
-      case None[String]()        => false           // Handle the case where the Option is empty
+      case Some[String](foundValue) => foundValue == value 
+      case None[String]()        => false           
     }
   }
 
@@ -106,6 +177,11 @@ object Tests{
   }
 
   def insertNoSplitTests(): Unit = {
-    assert(testLeaf.insertNoSplit(5, "five") ==  LeafNode[String](List[BigInt](1, 2, 3, 4, 5, 6), List("one", "two", "three", "four", "five", "six"), 10, None[LeafNode[String]]()))
+    assert(testLeaf.insertNoSplit(5, "five") ==  LeafNode[String](List[(BigInt, String)]((1, "one"), (2, "two"), (3, "three"), (4, "four"), (5, "five"), (6, "six")), 10, None[LeafNode[String]]()))
   }
+
+  /*def insertSplitTests(): Unit = {
+    assert(testInsertLeaf.insertSplit(5, "five")==(testInsertLeaf1, testInsertLeaf2))
+  }*/
+  //stainless can't handle this test - see how to do tests with the TAs
 }

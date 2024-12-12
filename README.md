@@ -1,4 +1,5 @@
 # formal-verification
 Verify shit formally
 
-Q:I am not sure if imutable version need to use List rather than still using Vector 
+To use stainless, do '''stainless bplus_stainless.scala''' ==> this verifies that our proofs are correct
+Unit tests are in Test/tests.scala. To run those, use '''scala-cli . Test'''

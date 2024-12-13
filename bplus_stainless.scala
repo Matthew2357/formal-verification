@@ -112,7 +112,11 @@ object bplus_stainless {
     
     //make sure that conditions we need are met
     def isGood(): Boolean =  {
-      isOrdered(keyValues.map(_._1)) && this.size() <= order && 2*this.size() >= order && order >= 1
+      isOrdered(keyValues.map(_._1)) && this.size() <= order && 2*this.size() >= order && order >= 2
+    }
+
+    def isAlmostGood(): Boolean = {
+      isOrdered(keyValues.map(_._1)) && this.size() <= order && this.size() >= order/2 && order >= 2
     }
 
     def search(key: BigInt): Option[V] = {
@@ -243,7 +247,23 @@ object bplus_stainless {
         res=>this.isGood() && 
         ((res._1.size() == this.size() && !res._2) || (res._1.size() == this.size() -1 && res._2))
         )
-  }
+      
+      //given a leaf node, we merge with the next one
+      def MergeWithNext(): LeafNode[V] = {
+      require(
+        this.next.isDefined && 
+        (this.size() + this.next.get.size() <= order) && 
+        this.isAlmostGood() && this.next.get.isAlmostGood() &&
+        this.keyValues.map(_._1).last < this.next.get.keyValues.map(_._1).head
+      )
+      this
+
+  // TODO: finish this
+}
+
+      
+  
+    }
 
   //===============================What we have proven so far=============================================
   /*

@@ -104,8 +104,47 @@ object bplus_stainless {
 
   sealed abstract class Node[V] extends BPlusTree[V] 
 
-  case class InternalNode[V](keys: List[BigInt], children: List[Node[V]],  override val order: BigInt) extends Node[V] {
-    // InternalNode-specific code
+  case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override val order: BigInt) extends Node[V] {
+
+    // Ensure the node is in a valid state
+    def isGood(): Boolean = {
+      keys.length + 1 == children.length &&
+      keys.length <= order - 1 &&
+      keys.length >= (order / 2) &&
+      order >= 2 &&
+      isOrdered(keys)
+    }
+
+    def insertInternal(key: BigInt, leftChild: Node[V], rightChild: Node[V]): Node[V] = {
+      require(this.isGood() && children.contains(leftChild))
+
+      // Find the index to insert the key and child
+      val idx = children.indexOf(leftChild)
+      val newKeys = keys.take(idx) ++ List(key) ++ keys.drop(idx)
+      val newChildren = children.take(idx + 1) ++ List(rightChild) ++ children.drop(idx + 1)
+
+      if (newKeys.length <= order - 1) {
+        // No need to split
+        InternalNode[V](newKeys, newChildren, order)
+      } else {
+        // Need to split
+        val mid = newKeys.length / 2
+        val promotedKey = newKeys(mid)
+        val leftKeys = newKeys.take(mid)
+        val rightKeys = newKeys.drop(mid + 1)
+        val leftChildren = newChildren.take(mid + 1)
+        val rightChildren = newChildren.drop(mid + 1)
+
+        val leftNode = InternalNode[V](leftKeys, leftChildren, order)
+        val rightNode = InternalNode[V](rightKeys, rightChildren, order)
+
+        // If this node is the root, create a new root
+        // For simplicity, we assume the root check is handled externally
+
+        // Return a new root node
+        InternalNode[V](List(promotedKey), List(leftNode, rightNode), order)
+      }
+    }
   }
 
   case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: BigInt, val next: Option[LeafNode[V]]) extends Node[V] {

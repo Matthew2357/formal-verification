@@ -104,48 +104,116 @@ object bplus_stainless {
 
   sealed abstract class Node[V] extends BPlusTree[V] 
 
-  case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override val order: BigInt) extends Node[V] {
+case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override val order: BigInt) extends Node[V] {
 
-    // Ensure the node is in a valid state
-    def isGood(): Boolean = {
-      keys.length + 1 == children.length &&
-      keys.length <= order - 1 &&
-      keys.length >= (order / 2) &&
-      order >= 2 &&
-      isOrdered(keys)
+  def isGood(): Boolean = {
+    keys.length + 1 == children.length &&
+    keys.length <= order - 1 &&
+    keys.length >= (order / 2) &&
+    order >= 2 &&
+    isOrdered(keys)
+  }
+
+  // Helper function to insert key into keys list
+  def getNewKeys(key: BigInt, ks: List[BigInt], ord: BigInt): List[BigInt] = {
+    require(ks.length < ord && isOrdered(ks) && !ks.contains(key))
+    ks match {
+      case Nil() => List(key)
+      case Cons(h, t) =>
+        if (key < h) {
+          Cons(key, ks)
+        } else {
+          val newKs = getNewKeys(key, t, ord - 1)
+          Cons(h, newKs)
+        }
     }
+  }.ensuring { res =>
+    res.length <= ord &&
+    res.length == ks.length + 1 &&
+    isOrdered(res) &&
+    (!ks.isEmpty ==> (res.head == (if (key < ks.head) key else ks.head))) &&
+    (res.contains(key)) &&
+    (ks.forall(k => res.contains(k)))
+  }
 
-    def insertInternal(key: BigInt, leftChild: Node[V], rightChild: Node[V]): Node[V] = {
-      require(this.isGood() && children.contains(leftChild))
+  // Helper function to insert rightChild after leftChild in children list
+  def getNewChildren(leftChild: Node[V], rightChild: Node[V], cs: List[Node[V]]): List[Node[V]] = {
+    require(cs.contains(leftChild))
+    cs match {
+      case Cons(c, t) =>
+        if (c == leftChild) {
+          Cons(c, Cons(rightChild, t))
+        } else {
+          val newCs = getNewChildren(leftChild, rightChild, t)
+          Cons(c, newCs)
+        }
+      case _ => cs // This case won't occur due to the require condition
+    }
+  }.ensuring { res =>
+    res.length == cs.length + 1 &&
+    res.contains(leftChild) &&
+    res.contains(rightChild) &&
+    cs.forall(child => res.contains(child) || child == leftChild)
+  }
 
-      // Find the index to insert the key and child
-      val idx = children.indexOf(leftChild)
-      val newKeys = keys.take(idx) ++ List(key) ++ keys.drop(idx)
-      val newChildren = children.take(idx + 1) ++ List(rightChild) ++ children.drop(idx + 1)
+  // Insert into an internal node without splitting
+  def insertNoSplit(key: BigInt, leftChild: Node[V], rightChild: Node[V]): InternalNode[V] = {
+    require(this.isGood() && keys.length < order - 1 && children.contains(leftChild) && !keys.contains(key))
+    val newKeys = getNewKeys(key, keys, order - 1)
+    val newChildren = getNewChildren(leftChild, rightChild, children)
+    InternalNode[V](newKeys, newChildren, order)
+  }.ensuring { res =>
+    res.isGood() &&
+    res.keys.length == this.keys.length + 1 &&
+    res.children.length == this.children.length + 1 &&
+    res.children.contains(rightChild)
+  }
 
-      if (newKeys.length <= order - 1) {
-        // No need to split
-        InternalNode[V](newKeys, newChildren, order)
-      } else {
-        // Need to split
-        val mid = newKeys.length / 2
-        val promotedKey = newKeys(mid)
-        val leftKeys = newKeys.take(mid)
-        val rightKeys = newKeys.drop(mid + 1)
-        val leftChildren = newChildren.take(mid + 1)
-        val rightChildren = newChildren.drop(mid + 1)
+  // Insert into an internal node with splitting
+  def insertSplit(key: BigInt, leftChild: Node[V], rightChild: Node[V]): (InternalNode[V], InternalNode[V], BigInt) = {
+    require(this.isGood() && keys.length == order - 1 && children.contains(leftChild) && !keys.contains(key))
+    val newKeys = getNewKeys(key, keys, order)
+    val newChildren = getNewChildren(leftChild, rightChild, children)
+    val mid = newKeys.length / 2
+    val promotedKey = newKeys(mid)
+    val leftKeys = newKeys.take(mid)
+    val rightKeys = newKeys.drop(mid + 1)
+    val leftChildren = newChildren.take(mid + 1)
+    val rightChildren = newChildren.drop(mid + 1)
+    val leftNode = InternalNode[V](leftKeys, leftChildren, order)
+    val rightNode = InternalNode[V](rightKeys, rightChildren, order)
+    (leftNode, rightNode, promotedKey)
+  }.ensuring { res =>
+    val (leftNode, rightNode, promotedKey) = res
+    leftNode.isGood() &&
+    rightNode.isGood() &&
+    leftNode.keys.length >= (order / 2) &&
+    rightNode.keys.length >= (order / 2) &&
+    isOrdered(leftNode.keys ++ (promotedKey :: rightNode.keys)) &&
+    leftNode.keys.lastOption.getOrElse(BigInt(0)) < promotedKey &&
+    promotedKey < rightNode.keys.headOption.getOrElse(BigInt(0))
+  }
 
-        val leftNode = InternalNode[V](leftKeys, leftChildren, order)
-        val rightNode = InternalNode[V](rightKeys, rightChildren, order)
-
-        // If this node is the root, create a new root
-        // For simplicity, we assume the root check is handled externally
-
-        // Return a new root node
-        InternalNode[V](List(promotedKey), List(leftNode, rightNode), order)
-      }
+  // Insert into internal node
+  def insertInternal(key: BigInt, leftChild: Node[V], rightChild: Node[V]): Either[InternalNode[V], (InternalNode[V], InternalNode[V], BigInt)] = {
+    require(this.isGood() && children.contains(leftChild) && !keys.contains(key))
+    if (keys.length < order - 1) {
+      val newNode = insertNoSplit(key, leftChild, rightChild)
+      Left(newNode)
+    } else {
+      val splitResult = insertSplit(key, leftChild, rightChild)
+      Right(splitResult)
+    }
+  }.ensuring { res =>
+    res match {
+      case Left(node) => node.isGood()
+      case Right((leftNode, rightNode, promotedKey)) =>
+        leftNode.isGood() && rightNode.isGood() &&
+        leftNode.keys.lastOption.getOrElse(BigInt(0)) < promotedKey &&
+        promotedKey < rightNode.keys.headOption.getOrElse(BigInt(0))
     }
   }
+}
 
   case class LeafNode[V](val keyValues : List[(BigInt, V)], override val order: BigInt, val next: Option[LeafNode[V]]) extends Node[V] {
     
@@ -297,7 +365,6 @@ object bplus_stainless {
       )
       this
 
-  // TODO: finish this
 }
 
       

@@ -198,19 +198,23 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override
   def insertInternal(key: BigInt, leftChild: Node[V], rightChild: Node[V]): Either[InternalNode[V], (InternalNode[V], InternalNode[V], BigInt)] = {
     require(this.isGood() && children.contains(leftChild) && !keys.contains(key))
     if (keys.length < order - 1) {
-      val newNode = insertNoSplit(key, leftChild, rightChild)
+      val newNode: InternalNode[V] = insertNoSplit(key, leftChild, rightChild)
+      assert(newNode.isInstanceOf[InternalNode[V]])  // Add assertion
       Left(newNode)
     } else {
-      val splitResult = insertSplit(key, leftChild, rightChild)
-      Right(splitResult)
+      val (left, right, promoted) = insertSplit(key, leftChild, rightChild)
+      assert(left.isInstanceOf[InternalNode[V]] && right.isInstanceOf[InternalNode[V]])  // Add assertion
+      Right((left, right, promoted))
     }
   }.ensuring { res =>
     res match {
-      case Left(node) => node.isGood()
-      case Right((leftNode, rightNode, promotedKey)) =>
-        leftNode.isGood() && rightNode.isGood() &&
-        leftNode.keys.lastOption.getOrElse(BigInt(0)) < promotedKey &&
-        promotedKey < rightNode.keys.headOption.getOrElse(BigInt(0))
+      case Left(node) => 
+        node.isInstanceOf[InternalNode[V]] && node.isGood()
+      case Right((left, right, key)) =>
+        left.isInstanceOf[InternalNode[V]] && right.isInstanceOf[InternalNode[V]] &&
+        left.isGood() && right.isGood() &&
+        left.keys.lastOption.getOrElse(BigInt(0)) < key &&
+        key < right.keys.headOption.getOrElse(BigInt(0))
     }
   }
 }
@@ -276,21 +280,24 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override
       //we could do without introducing steps, it is redundant
       //it just makes my thinking a bit easier
       //the intuition is to start with one list and one empty one, and transfer an element from one list to the other until we have two lists of the desired lengths
-      def splitList(l1: List[(BigInt, V)], l2: List[(BigInt, V)], n: BigInt, steps: BigInt, m: BigInt) : (List[(BigInt, V)], List[(BigInt, V)]) = {
+     
+      def splitList(l1: List[(BigInt, V)], l2: List[(BigInt, V)], n: BigInt, steps: BigInt, m: BigInt): (List[(BigInt, V)], List[(BigInt, V)]) = {
         //n -> total number of elements, m -> number we want to move from l2 to l1, steps -> number of steps left
         require(
         (l1++l2).length == n && 
-        isOrdered(l1.map(_._1)++l2.map(_._1)) && 
+        isOrdered((l1++l2).map(_._1)) && 
         l1.length == m-steps && 
         l2.length == n-(m-steps) && 
         m <= n && 
         steps <= m && 
         m>0 && 
         n>0 && 
-        steps>= 0
+        steps>= 0 &&
+        // Add additional precondition to ensure ordering between l1 and l2
+        (l1.isEmpty || l2.isEmpty || l1.last._1 < l2.head._1)
         ) 
 
-        decreases(steps)
+        decreases(steps + l1.length + l2.length)
         if(steps==0){
           biggestSmallest(l1.map(_._1), l2.map(_._1))
           (l1, l2)
@@ -314,7 +321,7 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override
       (!res._1.isEmpty && !res._2.isEmpty) ==> res._1.map(_._1).last < res._2.map(_._1).head
       )
 
-      val splitlist = splitList(Nil[(BigInt, V)](), newlist, order+1, (order/2)+1, (order/2)+1)
+      val splitlist = splitList(Nil[(BigInt, V)](), newlist, order+1, (order/2), (order+1)/2)
       sublistsAreOrdered(splitlist._1.map(_._1), splitlist._2.map(_._1))
       val lfnode2 = LeafNode[V](splitlist._2, order, this.next)
       val lfnode1 = LeafNode[V](splitlist._1, order, Some[LeafNode[V]](lfnode2))
@@ -323,8 +330,8 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override
       }.ensuring(
       res => res._1.isGood() && 
       res._2.isGood() &&
-      res._1.size()==(order/2)+1 && 
-      res._2.size()==(order+1)/2 && 
+      res._1.size()==(order/2) && 
+      res._2.size()==((order+1)/2) && 
       res._1.next == Some(res._2) && res._2.next == this.next &&
       res._1.keyValues.map(_._1).last < res._2.keyValues.map(_._1).head
       ) 
@@ -357,15 +364,16 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override
       
       //given a leaf node, we merge with the next one
       def MergeWithNext(): LeafNode[V] = {
-      require(
-        this.next.isDefined && 
-        (this.size() + this.next.get.size() <= order) && 
-        this.isAlmostGood() && this.next.get.isAlmostGood() &&
-        this.keyValues.map(_._1).last < this.next.get.keyValues.map(_._1).head
-      )
-      this
-
-}
+        require(
+          this.next.isDefined && 
+          (this.size() + this.next.get.size() <= order) && 
+          this.isAlmostGood() && this.next.get.isAlmostGood() &&
+          this.keyValues.map(_._1).last < this.next.get.keyValues.map(_._1).head
+        )
+        val mergedKeyValues = this.keyValues ++ this.next.get.keyValues
+        val mergedNext = this.next.get.next
+        LeafNode[V](mergedKeyValues, order, mergedNext)
+      }
 
       
   
@@ -387,6 +395,5 @@ case class InternalNode[V](keys: List[BigInt], children: List[Node[V]], override
   */
 
   //====================================================Tests (put this in a different file?)====================================
-
 
 }

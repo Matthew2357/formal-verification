@@ -71,8 +71,12 @@ object BPlusTreeVerification {
   def treeHeight(t: Tree): BigInt = {
     t match {
       case Leaf(_, _) => 1
-      case Internal(_, children) =>
-        1 + (if (children.isEmpty) BigInt(0) else maxOfList(children.map(treeHeight)))
+      case Internal(keys, children) =>
+        if (keys.nonEmpty && children.size == keys.size + 1) {
+          1 + (if (children.isEmpty) BigInt(0) else maxOfList(children.map(treeHeight)))
+        } else {
+          0
+        }
     }
   }
 
@@ -106,9 +110,13 @@ object BPlusTreeVerification {
     tree match {
       case Leaf(keys, _) => keys.contains(key)
       case Internal(keys, children) =>
-        val pos = findPosition(keys, key)
-        if (pos < keys.size && keys(pos) == key) true
-        else contains(children(pos), key)
+        if (keys.nonEmpty && children.size == keys.size + 1 && isSorted(keys)) {
+          val pos = findPosition(keys, key)
+          if (pos < keys.size && keys(pos) == key) true
+          else contains(children(pos), key)
+        } else {
+          false
+        }
     }
   }
 
@@ -281,8 +289,12 @@ object BPlusTreeVerification {
     
     val newKeys = insertIntoSorted(keys, key)
     val (left, right) = (newKeys.take(at), newKeys.drop(at))
-    
-    BPlusTreeSpecs.orderedSpread(left, newKeys(at), right)
+    val x = newKeys(at)
+
+    assert(isSorted(left) && isSorted(right))
+    assert(left.forall(_ < x) && right.forall(x < _))
+
+    BPlusTreeSpecs.orderedSpread(left, x, right)
   }.ensuring(_ == true)
 }
 

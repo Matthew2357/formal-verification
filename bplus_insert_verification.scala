@@ -4,21 +4,26 @@ import stainless.annotation._
 import stainless.proof._
 
 object BPlusTreeVerification {
-  val MIN_ORDER: BigInt = 3
+  val MIN_ORDER: BigInt = 2
   val ORDER: BigInt = MIN_ORDER // Define ORDER as fixed MIN_ORDER
 
   // Core invariants
   sealed abstract class Tree {
+
+    def contentHelper: List[BigInt] = {
+          this match {
+            case Leaf(keys, _) => keys
+            case Internal(keys, children) =>
+              // Ensure children are non-empty before folding
+              if (children.isEmpty) keys
+              else children.foldLeft(keys)((acc, c) => acc ++ c.contentHelper)
+          }
+        }
     @opaque
     def content: Set[BigInt] = {
-      this match {
-        case Leaf(keys, _) => keys.toSet
-        case Internal(keys, children) =>
-          // Ensure children are non-empty before folding
-          if (children.isEmpty) keys.toSet
-          else children.foldLeft(keys.toSet)((acc, c) => acc ++ c.content)
+      
+        this.contentHelper.toSet
       }
-    }
 
     def size: BigInt = this match {
       case Leaf(keys, _) => keys.size
@@ -159,14 +164,14 @@ object BPlusTreeVerification {
         if (keys.isEmpty) false 
         else {
           // Strengthen the containment check
-          val res = keys.contains(key)
-          assert(res == tree.content.contains(key))
+          val res:Boolean = keys.contains(key)
+          assert(res == tree.contentHelper.contains(key))
           res
         }
       case internal @ Internal(keys, children) =>
         val pos = findPosition(keys, key)
         if (pos < keys.size && keys(pos) == key) {
-          assert(tree.content.contains(key))
+          assert(tree.contentHelper.contains(key))
           true
         } else if (pos < children.size) {
           // Add measure decrease assertion
@@ -174,11 +179,11 @@ object BPlusTreeVerification {
           contains(children(pos), key)
         } else false
     }
-  }.ensuring(res => res == tree.content.contains(key))
+  }.ensuring(res => res == tree.contentHelper.contains(key))
 
   // Added a helper function to accurately compute the expected result
   def computeContains(tree: Tree, key: BigInt): Boolean = {
-    tree.content.contains(key)
+    tree.contentHelper.contains(key)
   }
   // Ensures the postcondition aligns with the actual content of the tree
 
@@ -417,7 +422,7 @@ object BPlusTreeVerification {
         children.forall(c => insertMeasure(c) < insertMeasure(t)) &&
         children.nonEmpty && children.forall(c => insertMeasure(c) <= insertMeasure(t))
     })
-    && (!t.isInstanceOf[Leaf] || t.asInstanceOf[Leaf].keys.nonEmpty) // Added invariant
+    && (if(t.isInstanceOf[Leaf]) { t.asInstanceOf[Leaf].keys.nonEmpty}else true) // Added invariant
   }.ensuring(res => insertMeasure(t) >= 0)
 
   // Add helper lemma for sorted lists

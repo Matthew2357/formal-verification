@@ -149,7 +149,8 @@ object BPlusTreeVerification {
   }.ensuring(res => res >= BigInt(1)
   && (!t.isInstanceOf[Internal] || maxOfList(t.asInstanceOf[Internal].children.map(insertMeasure)) < res)) // Ensuring measure is always positive
 
-  def newMeasure(t: Tree): BigInt = {
+  def newMeasure(t: Tree, isRoot: Boolean): BigInt = {
+  require(isValidTree(t, isRoot))
   decreases(
     
       measureHelper(t), t.size
@@ -158,14 +159,22 @@ object BPlusTreeVerification {
   t match {
     case Leaf(keys, values) => BigInt(1)
     case Internal(keys, children) => 
-      BigInt(0) //placeholder
+      (keys, children) match {
+        case (_, Nil()) => BigInt(1)
+        case (keyss, Cons(head, tail)) => 
+          val newKeys = if(keyss.length==1){Nil[BigInt]()}else{keys.init}
+          val headMeasure = newMeasure(head, false)
+          val tempNode = Internal(newKeys, tail)
+          max(headMeasure, newMeasure(tempNode, isRoot))+1
+      }
   }
-}
+}.ensuring(res => res >= 1  &&
+ (!t.isInstanceOf[Internal] || t.asInstanceOf[Internal].children.forall(c => newMeasure(c, false) < res)))
 
   def measureHelper(t: Tree): BigInt = {
     t match {
       case Internal(_, children) => children.length
-      case Leaf(keys, values) => BigInt(0)
+      case Leaf(keys, values) => BigInt(0) 
     }
   }
 

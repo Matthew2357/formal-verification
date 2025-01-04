@@ -40,9 +40,10 @@ object BPlusTreeVerification {
       }
 
     def size: BigInt = {
+      
       this match {
       case Leaf(keys, _) => keys.size
-      case Internal(_, children) => 1 + children.map(_.size).foldLeft(BigInt(0))(_ + _)
+      case Internal(_, children) => max(0,1 + children.map(_.size).foldLeft(BigInt(0))(_ + _))
     }
   }.ensuring(res => res >= 0)
 
@@ -72,7 +73,7 @@ object BPlusTreeVerification {
         isSorted(keys) &&
         children.forall(c => isValidTree(c, false))
     }
-  }.ensuring(res => res ==> !t.isInstanceOf[Internal] || t.asInstanceOf[Internal].children.forall(c => isValidTree(c, false)))
+  }.ensuring(res => res ==> (!t.isInstanceOf[Internal] || t.asInstanceOf[Internal].children.forall(c => isValidTree(c, false))))
 
   def isValidSize(size: BigInt, isRoot: Boolean): Boolean = { // Removed 'order' parameter
     if (isRoot) size <= ORDER

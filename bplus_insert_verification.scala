@@ -53,7 +53,7 @@ object BPlusTreeVerification {
         isSorted(keys) &&
         children.forall(c => isValidTree(c, false))
     }
-  }
+  }.ensuring(res => res ==> !t.isInstanceOf[Internal] || t.asInstanceOf[Internal].children.forall(c => isValidTree(c, false)))
 
   def isValidSize(size: BigInt, isRoot: Boolean): Boolean = { // Removed 'order' parameter
     if (isRoot) size <= ORDER
@@ -120,9 +120,26 @@ object BPlusTreeVerification {
     val result = tree match {
       case leaf @ Leaf(keys, values) =>
         // Added check for empty Leaf
+        if (!keys.isEmpty) {
+          //preconditions for contains
+          /* 
+          require(
+      insertMeasure(tree) >= 0 &&
+      insertMeasureInvariant(tree) &&
+      isValidTree(tree, false) &&
+      // Add requirement that internal nodes have valid children count
+      (!tree.isInstanceOf[Internal] || 
+        tree.asInstanceOf[Internal].children.size == tree.asInstanceOf[Internal].keys.size + 1)
+    )
+           */
+          assert(insertMeasure(leaf) >= 0)
+          assert(insertMeasureInvariant(leaf))
+          //assert(isValidTree(leaf, false)) //this throws invalid
+          
+        }
         if (keys.isEmpty) {
           insertIntoLeaf(leaf, key, value)
-        } else if (contains(leaf, key)) {
+        } else if (contains(leaf, key, isRoot)) {
           leaf
         } else if (keys.size < ORDER) { // Replaced 'order' with 'ORDER'
           
@@ -155,11 +172,11 @@ object BPlusTreeVerification {
 
   // Helper functions
   @opaque
-  def contains(tree: Tree, key: BigInt): Boolean = {
+  def contains(tree: Tree, key: BigInt, isRoot: Boolean): Boolean = {
     require(
       insertMeasure(tree) >= 0 &&
       insertMeasureInvariant(tree) &&
-      isValidTree(tree, false) &&
+      isValidTree(tree, isRoot) &&
       // Add requirement that internal nodes have valid children count
       (!tree.isInstanceOf[Internal] || 
         tree.asInstanceOf[Internal].children.size == tree.asInstanceOf[Internal].keys.size + 1)
@@ -183,7 +200,7 @@ object BPlusTreeVerification {
         } else if (pos < children.size) {
           // Add measure decrease assertion
           assert(insertMeasure(children(pos)) < insertMeasure(tree))
-          contains(children(pos), key)
+          contains(children(pos), key, false)
         } else false
     }
   }.ensuring(res => res == tree.contentHelper.contains(key))

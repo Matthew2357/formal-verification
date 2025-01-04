@@ -347,7 +347,8 @@ object BPlusTreeVerification {
       pos >= 0 && pos < node.children.size &&
       isSorted(node.keys) &&
       isValidTree(newChild, false) &&
-      insertMeasure(node, true) >= 0
+      isValidTree(node, true)
+      
     )
 
     newChild match {

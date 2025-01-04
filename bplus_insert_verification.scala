@@ -39,10 +39,13 @@ object BPlusTreeVerification {
         this.contentHelper(insertMeasure(this)).toSet
       }
 
-    def size: BigInt = this match {
+    def size: BigInt = {
+      this match {
       case Leaf(keys, _) => keys.size
       case Internal(_, children) => 1 + children.map(_.size).foldLeft(BigInt(0))(_ + _)
     }
+  }.ensuring(res => res >= 0)
+
   }
 
   
@@ -145,6 +148,26 @@ object BPlusTreeVerification {
     }
   }.ensuring(res => res >= BigInt(1)
   && (!t.isInstanceOf[Internal] || maxOfList(t.asInstanceOf[Internal].children.map(insertMeasure)) < res)) // Ensuring measure is always positive
+
+  def newMeasure(t: Tree): BigInt = {
+  decreases(
+    
+      measureHelper(t), t.size
+    )
+
+  t match {
+    case Leaf(keys, values) => BigInt(1)
+    case Internal(keys, children) => 
+      BigInt(0) //placeholder
+  }
+}
+
+  def measureHelper(t: Tree): BigInt = {
+    t match {
+      case Internal(_, children) => children.length
+      case Leaf(keys, values) => BigInt(0)
+    }
+  }
 
 
   // Ensure internalChildrenCountLemma is only called on valid Internal trees
@@ -344,7 +367,27 @@ object BPlusTreeVerification {
           )
         }
       case _ =>
-        Internal(node.keys, node.children.updated(pos, newChild))
+        /* 
+        t match {
+      case Leaf(keys, values) => 
+        keys.size == values.size &&
+        isValidSize(keys.size, isRoot) &&
+        isSorted(keys)
+      case Internal(keys, children) =>
+        keys.nonEmpty &&
+        children.size == keys.size + 1 &&
+        isValidSize(keys.size, isRoot) &&
+        isSorted(keys) &&
+        children.forall(c => isValidTree(c, false))
+    }
+         */
+        val res = Internal(node.keys, node.children.updated(pos, newChild))
+        assert(res.keys.nonEmpty)
+        assert(res.children.size==res.keys.size+1)
+        assert(isValidSize(res.keys.size, false)) //unknown
+        assert(isSorted(res.keys))
+        assert(res.children.forall(c=>isValidTree(c,false))) //unknown
+        res
     }
   }.ensuring(res => 
     isValidTree(res, false) 

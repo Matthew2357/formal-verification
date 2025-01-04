@@ -4,7 +4,7 @@ import stainless.annotation._
 import stainless.proof._
 
 object BPlusTreeVerification {
-  val MIN_ORDER: BigInt = 2
+  val MIN_ORDER: BigInt = 3
   val ORDER: BigInt = MIN_ORDER // Define ORDER as fixed MIN_ORDER
 
   // Core invariants
@@ -110,7 +110,7 @@ object BPlusTreeVerification {
   // Ensure internalChildrenCountLemma is only called on valid Internal trees
   def insert(tree: Tree, key: BigInt, value: BigInt, isRoot: Boolean): Tree = {
     require(
-      ORDER >= MIN_ORDER && // Ensure ORDER is not less than MIN_ORDER
+      ORDER == MIN_ORDER && // Ensure ORDER is not less than MIN_ORDER
       isValidTree(tree, isRoot) &&
       insertMeasure(tree) >= 0 &&
       insertMeasureInvariant(tree)
@@ -125,8 +125,15 @@ object BPlusTreeVerification {
         } else if (contains(leaf, key)) {
           leaf
         } else if (keys.size < ORDER) { // Replaced 'order' with 'ORDER'
+          
           insertIntoLeaf(leaf, key, value)
         } else {
+          assert(ORDER == MIN_ORDER)
+          assert(isSorted(leaf.keys))
+          assert(!leaf.keys.contains(key))
+          assert(leaf.keys.size==ORDER)
+          assert(insertMeasureInvariant(leaf))
+          //assert(!leaf.values.contains(value))//this throws invalid
           splitLeaf(leaf, key, value) // Removed 'order' parameter
         }
 
@@ -216,14 +223,14 @@ object BPlusTreeVerification {
   @opaque
   private def splitLeaf(leaf: Leaf, key: BigInt, value: BigInt): Tree = { // Removed 'order' parameter
     require(
-      ORDER >= MIN_ORDER && // Enforce ORDER >= MIN_ORDER
+      ORDER == MIN_ORDER && // Enforce ORDER >= MIN_ORDER
       isSorted(leaf.keys) &&
       // Added explicit check for missing key
       !leaf.keys.contains(key) &&
       leaf.keys.size == ORDER && // Replaced 'order' with 'ORDER'
       // Add measure invariant requirement
-      insertMeasureInvariant(leaf) &&
-      !leaf.values.contains(value) // Ensure value is not already present
+      insertMeasureInvariant(leaf) 
+      //&& !leaf.values.contains(value) // Ensure value is not already present
     )
     
     val pos = findPosition(leaf.keys, key)

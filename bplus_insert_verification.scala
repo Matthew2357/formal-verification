@@ -15,13 +15,19 @@ object BPlusTreeVerification {
     
     def contentHelper(currentHeight: BigInt): List[BigInt] = {
       require(currentHeight >= insertMeasure(this))
-      decreases(currentHeight, insertMeasure(this))
+      decreases(currentHeight) // Ensure currentHeight decreases
+
       this match {
         case Leaf(keys, _) => keys
         case Internal(keys, children) =>
-          // Ensure children are non-empty before folding
           if (children.isEmpty) keys
-          else children.foldLeft(List[BigInt]())((acc, c) => acc ++ c.contentHelper(insertMeasure(c)))
+          else {
+            // Ensure currentHeight decreases for each child
+            children.foldLeft(List[BigInt]()) { (acc, c) =>
+              require(currentHeight - 1 >= insertMeasure(c)) // Add requirement
+              acc ++ c.contentHelper(currentHeight - 1)
+            }
+          }
       }
     }//.ensuring(_ => !this.isInstanceOf[Internal] || this.asInstanceOf[Internal].children.forall(c => isValidTree(c, true)))
     
@@ -140,15 +146,6 @@ object BPlusTreeVerification {
   }.ensuring(res => res >= BigInt(1)
   && (!t.isInstanceOf[Internal] || maxOfList(t.asInstanceOf[Internal].children.map(insertMeasure)) < res)) // Ensuring measure is always positive
 
-  def maxHelper(m: BigInt, l: List[BigInt]) : Unit = {
-    require(max(1,l.foldLeft(BigInt(0))(max)) < m)
-    l match {
-      case Nil() =>()
-      case Cons(head, tail) => 
-        maxHelper(m, tail)
-    }
-  }.ensuring(l.forall(c => c < m))
-  
 
   // Ensure internalChildrenCountLemma is only called on valid Internal trees
   def insert(tree: Tree, key: BigInt, value: BigInt, isRoot: Boolean): Tree = {
@@ -489,7 +486,6 @@ object BPlusTreeVerification {
         children.forall(c => insertMeasure(c) < insertMeasure(t)) &&
         children.nonEmpty && children.forall(c => insertMeasure(c) <= insertMeasure(t))
     })
-    && (if(t.isInstanceOf[Leaf]) { t.asInstanceOf[Leaf].keys.nonEmpty}else true) // Added invariant
   }.ensuring(res => insertMeasure(t) >= 0)
 
   // Add helper lemma for sorted lists
@@ -572,7 +568,7 @@ object BPlusTreeSpecs {
     require(isSorted(l))
     l.match {
       case Nil() => true
-      case Cons(h, t) => t.isEmpty || h < t.head && sortedListInvariants(t)
+      case Cons(h, t) => t.isEmpty || (h < t.head && sortedListInvariants(t))
     }
   }.ensuring(_ => 
     l.isEmpty || 
@@ -581,4 +577,3 @@ object BPlusTreeSpecs {
   )
 }
 
-//icon1

@@ -29,29 +29,29 @@ object BPlusTreeVerification {
             }
           }
       }
-    }//.ensuring(_ => !this.isInstanceOf[Internal] || this.asInstanceOf[Internal].children.forall(c => isValidTree(c, true)))
-    /*
-    def content(currentHeight: BigInt): List[BigInt] = {
-      require(currentHeight >= 0)
-      require(isValidTree(this, true))  // Add this requirement
+    }
+
+    def valueContent(currentHeight: BigInt): List[BigInt] = {
+      require(isValidTree(this, true) &&currentHeight >= insertMeasure(this, true))
       decreases(currentHeight) // Ensure currentHeight decreases
 
       this match {
-        case Leaf(keys, _) => keys
+        case Leaf(_, values) => values
         case Internal(keys, children) =>
-          if (children.isEmpty) keys
+          if (children.isEmpty) List[BigInt]()
           else {
             // Ensure currentHeight decreases for each child
             children.foldLeft(List[BigInt]()) { (acc, c) =>
-              require(isValidTree(c, false))  // Add this requirement
-              require(currentHeight > 0)      // Add this requirement
+              require(currentHeight - 1 >= insertMeasure(c, true)) // Add requirement
               acc ++ c.content(currentHeight - 1)
             }
           }
       }
     }
     
-*/
+    
+    
+    
     
     def size: BigInt = {
       
@@ -199,7 +199,8 @@ object BPlusTreeVerification {
     require(
       ORDER == MIN_ORDER && // Ensure ORDER is not less than MIN_ORDER
       isValidTree(tree, isRoot) &&
-      insertMeasure(tree, isRoot) >= 0
+      insertMeasure(tree, isRoot) >= 0 &&
+      !tree.valueContent(insertMeasure(tree, isRoot)).contains(value)
     )
     decreases(insertMeasure(tree, isRoot))
     
@@ -254,45 +255,7 @@ object BPlusTreeVerification {
     insertMeasure(res, isRoot) >= 0
   )
 
-  /*def subtreeContent(tree: Internal, key: BigInt, isRoot: Boolean): Unit = {
-    require(isValidTree(tree, isRoot))
-
-  }.ensuring(tree.children.forall(c => c.content(insertMeasure(c, false)).contains(key) ==> tree.content(insertMeasure(tree, isRoot)).contains(key)))
-*/
-  // Helper functions
-/*
-  @opaque
-  def contains(tree: Tree, key: BigInt, isRoot: Boolean): Boolean = {
-    require(
-      ORDER >= MIN_ORDER &&
-      isValidTree(tree, isRoot) &&
-      (!tree.isInstanceOf[Internal] || 
-        tree.asInstanceOf[Internal].children.size == tree.asInstanceOf[Internal].keys.size + 1)
-    )
-    decreases(tree.size)
-    
-    tree.match {
-      case Leaf(keys, _) =>
-        if (keys.isEmpty) false 
-        else {
-          // Strengthen the containment check
-          val res:Boolean = keys.contains(key)
-          assert(res == tree.content(insertMeasure(tree, isRoot)).contains(key))
-          res
-        }
-      case internal @ Internal(keys, children) =>
-        val pos = findPosition(keys, key)
-        if (pos < keys.size && keys(pos) == key) {
-          assert(tree.content(insertMeasure(tree, isRoot)).contains(key))
-          true
-        } else if (pos < children.size) {
-          // Add measure decrease assertion
-          assert(insertMeasure(children(pos), false) < insertMeasure(tree, isRoot))
-          contains(children(pos), key, false)
-        } else false
-    }
-  }.ensuring(res => res == tree.content(treeHeight(tree)).contains(key))
-*/
+  
   
   @opaque
   def contains(tree: Tree, key: BigInt, isRoot: Boolean): Boolean = {
@@ -370,7 +333,7 @@ object BPlusTreeVerification {
       leaf.keys.size == ORDER && // Replaced 'order' with 'ORDER'
       // Add measure invariant requirement
       insertMeasure(leaf, true) >= 0
-      //&& !leaf.values.contains(value) // Ensure value is not already present
+      && !leaf.values.contains(value) // Ensure value is not already present
     )
     
     val pos = findPosition(leaf.keys, key)

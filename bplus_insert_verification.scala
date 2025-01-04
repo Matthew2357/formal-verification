@@ -13,7 +13,7 @@ object BPlusTreeVerification {
     
     
     
-    def contentHelper(currentHeight: BigInt): List[BigInt] = {
+    def content(currentHeight: BigInt): List[BigInt] = {
       require(currentHeight >= insertMeasure(this, true))
       decreases(currentHeight) // Ensure currentHeight decreases
 
@@ -25,7 +25,7 @@ object BPlusTreeVerification {
             // Ensure currentHeight decreases for each child
             children.foldLeft(List[BigInt]()) { (acc, c) =>
               require(currentHeight - 1 >= insertMeasure(c, true)) // Add requirement
-              acc ++ c.contentHelper(currentHeight - 1)
+              acc ++ c.content(currentHeight - 1)
             }
           }
       }
@@ -33,12 +33,7 @@ object BPlusTreeVerification {
     
   
 
-    @opaque
-    def content: Set[BigInt] = {
-      
-        this.contentHelper(insertMeasure(this, true)).toSet
-      }
-
+    
     def size: BigInt = {
       
       this match {
@@ -258,13 +253,13 @@ object BPlusTreeVerification {
         else {
           // Strengthen the containment check
           val res:Boolean = keys.contains(key)
-          assert(res == tree.contentHelper(insertMeasure(tree, isRoot)).contains(key))
+          assert(res == tree.content(insertMeasure(tree, isRoot)).contains(key))
           res
         }
       case internal @ Internal(keys, children) =>
         val pos = findPosition(keys, key)
         if (pos < keys.size && keys(pos) == key) {
-          assert(tree.contentHelper(insertMeasure(tree, isRoot)).contains(key))
+          assert(tree.content(insertMeasure(tree, isRoot)).contains(key))
           true
         } else if (pos < children.size) {
           // Add measure decrease assertion
@@ -272,11 +267,11 @@ object BPlusTreeVerification {
           contains(children(pos), key, false)
         } else false
     }
-  }.ensuring(res => res == tree.contentHelper(insertMeasure(tree, isRoot)).contains(key))
+  }.ensuring(res => res == tree.content(insertMeasure(tree, isRoot)).contains(key))
 
   // Added a helper function to accurately compute the expected result
   def computeContains(tree: Tree, key: BigInt): Boolean = {
-    tree.contentHelper(insertMeasure(tree, true)).contains(key)
+    tree.content(insertMeasure(tree, true)).contains(key)
   }
   // Ensures the postcondition aligns with the actual content of the tree
 

@@ -14,7 +14,7 @@ object BPlusTreeVerification {
     
     
     def content(currentHeight: BigInt): List[BigInt] = {
-      require(currentHeight >= insertMeasure(this, true))
+      require(isValidTree(this, true) &&currentHeight >= insertMeasure(this, true))
       decreases(currentHeight) // Ensure currentHeight decreases
 
       this match {
@@ -239,8 +239,9 @@ object BPlusTreeVerification {
   @opaque
   def contains(tree: Tree, key: BigInt, isRoot: Boolean): Boolean = {
     require(
-      insertMeasure(tree, isRoot) >= 0 &&
       isValidTree(tree, isRoot) &&
+      insertMeasure(tree, isRoot) >= 0 &&
+      
       // Add requirement that internal nodes have valid children count
       (!tree.isInstanceOf[Internal] || 
         tree.asInstanceOf[Internal].children.size == tree.asInstanceOf[Internal].keys.size + 1)
@@ -270,9 +271,9 @@ object BPlusTreeVerification {
   }.ensuring(res => res == tree.content(insertMeasure(tree, isRoot)).contains(key))
 
   // Added a helper function to accurately compute the expected result
-  def computeContains(tree: Tree, key: BigInt): Boolean = {
+  /*def computeContains(tree: Tree, key: BigInt): Boolean = {
     tree.content(insertMeasure(tree, true)).contains(key)
-  }
+  }*/
   // Ensures the postcondition aligns with the actual content of the tree
 
   // Make findPosition public
@@ -522,6 +523,7 @@ object BPlusTreeVerification {
   // Add helper lemma to support insertMeasurePositive
   @opaque
   def insertMeasureInvariant(t: Tree): Boolean = {
+    require(isValidTree(t, true))
     insertMeasure(t, true) >= 0 &&
     (t match {
       case Leaf(_, _) => true

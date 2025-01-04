@@ -14,7 +14,7 @@ object BPlusTreeVerification {
     
     
     def contentHelper(currentHeight: BigInt): List[BigInt] = {
-      require(currentHeight >= insertMeasure(this))
+      require(currentHeight >= insertMeasure(this, true))
       decreases(currentHeight) // Ensure currentHeight decreases
 
       this match {
@@ -24,7 +24,7 @@ object BPlusTreeVerification {
           else {
             // Ensure currentHeight decreases for each child
             children.foldLeft(List[BigInt]()) { (acc, c) =>
-              require(currentHeight - 1 >= insertMeasure(c)) // Add requirement
+              require(currentHeight - 1 >= insertMeasure(c, true)) // Add requirement
               acc ++ c.contentHelper(currentHeight - 1)
             }
           }
@@ -36,7 +36,7 @@ object BPlusTreeVerification {
     @opaque
     def content: Set[BigInt] = {
       
-        this.contentHelper(insertMeasure(this)).toSet
+        this.contentHelper(insertMeasure(this, true)).toSet
       }
 
     def size: BigInt = {
@@ -137,20 +137,20 @@ object BPlusTreeVerification {
     if (x > y) x else y
   }
 
-  def insertMeasure(t: Tree): BigInt = {
+  def oldMeasure(t: Tree): BigInt = {
     
     t match {
       case Leaf(_, _) => BigInt(1) // Ensure literal is BigInt
       case Internal(_, children) => 
         if(children.nonEmpty){
         
-        BigInt(1) + maxOfList(children.map(insertMeasure))
+        BigInt(1) + maxOfList(children.map(oldMeasure))
         }else{BigInt(1)}
     }
   }.ensuring(res => res >= BigInt(1)
-  && (!t.isInstanceOf[Internal] || maxOfList(t.asInstanceOf[Internal].children.map(insertMeasure)) < res)) // Ensuring measure is always positive
+  && (!t.isInstanceOf[Internal] || maxOfList(t.asInstanceOf[Internal].children.map(oldMeasure)) < res)) // Ensuring measure is always positive
 
-  def newMeasure(t: Tree, isRoot: Boolean): BigInt = {
+  def insertMeasure(t: Tree, isRoot: Boolean): BigInt = {
   require(isValidTree(t, isRoot))
   decreases(
     
@@ -164,13 +164,13 @@ object BPlusTreeVerification {
         case (_, Nil()) => BigInt(1)
         case (keyss, Cons(head, tail)) => 
           val newKeys = if(keyss.length==1){Nil[BigInt]()}else{keys.init}
-          val headMeasure = newMeasure(head, false)
+          val headMeasure = insertMeasure(head, false)
           val tempNode = Internal(newKeys, tail)
-          max(headMeasure, newMeasure(tempNode, isRoot))+1
+          max(headMeasure, insertMeasure(tempNode, isRoot))+1
       }
   }
 }.ensuring(res => res >= 1  &&
- (!t.isInstanceOf[Internal] || t.asInstanceOf[Internal].children.forall(c => newMeasure(c, false) < res)))
+ (!t.isInstanceOf[Internal] || t.asInstanceOf[Internal].children.forall(c => insertMeasure(c, false) < res)))
 
   def measureHelper(t: Tree): BigInt = {
     t match {
@@ -185,9 +185,9 @@ object BPlusTreeVerification {
     require(
       ORDER == MIN_ORDER && // Ensure ORDER is not less than MIN_ORDER
       isValidTree(tree, isRoot) &&
-      insertMeasure(tree) >= 0
+      insertMeasure(tree, isRoot) >= 0
     )
-    decreases(insertMeasure(tree))
+    decreases(insertMeasure(tree, isRoot))
     
     val result = tree.match {
       case leaf @ Leaf(keys, values) =>
@@ -204,7 +204,7 @@ object BPlusTreeVerification {
         tree.asInstanceOf[Internal].children.size == tree.asInstanceOf[Internal].keys.size + 1)
     )
            */
-          assert(insertMeasure(leaf) >= 0)
+          assert(insertMeasure(leaf, isRoot) >= 0)
           
           //assert(isValidTree(leaf, false)) //this throws invalid
           
@@ -237,20 +237,20 @@ object BPlusTreeVerification {
     result
   }.ensuring(res => 
     isValidTree(res, isRoot) &&
-    insertMeasure(res) >= 0
+    insertMeasure(res, isRoot) >= 0
   )
 
   // Helper functions
   @opaque
   def contains(tree: Tree, key: BigInt, isRoot: Boolean): Boolean = {
     require(
-      insertMeasure(tree) >= 0 &&
+      insertMeasure(tree, isRoot) >= 0 &&
       isValidTree(tree, isRoot) &&
       // Add requirement that internal nodes have valid children count
       (!tree.isInstanceOf[Internal] || 
         tree.asInstanceOf[Internal].children.size == tree.asInstanceOf[Internal].keys.size + 1)
     )
-    decreases(insertMeasure(tree))
+    decreases(insertMeasure(tree, isRoot))
     
     tree match {
       case Leaf(keys, _) =>
@@ -258,25 +258,25 @@ object BPlusTreeVerification {
         else {
           // Strengthen the containment check
           val res:Boolean = keys.contains(key)
-          assert(res == tree.contentHelper(insertMeasure(tree)).contains(key))
+          assert(res == tree.contentHelper(insertMeasure(tree, isRoot)).contains(key))
           res
         }
       case internal @ Internal(keys, children) =>
         val pos = findPosition(keys, key)
         if (pos < keys.size && keys(pos) == key) {
-          assert(tree.contentHelper(insertMeasure(tree)).contains(key))
+          assert(tree.contentHelper(insertMeasure(tree, isRoot)).contains(key))
           true
         } else if (pos < children.size) {
           // Add measure decrease assertion
-          assert(insertMeasure(children(pos)) < insertMeasure(tree))
+          assert(insertMeasure(children(pos), isRoot) < insertMeasure(tree, isRoot))
           contains(children(pos), key, false)
         } else false
     }
-  }.ensuring(res => res == tree.contentHelper(insertMeasure(tree)).contains(key))
+  }.ensuring(res => res == tree.contentHelper(insertMeasure(tree, isRoot)).contains(key))
 
   // Added a helper function to accurately compute the expected result
   def computeContains(tree: Tree, key: BigInt): Boolean = {
-    tree.contentHelper(insertMeasure(tree)).contains(key)
+    tree.contentHelper(insertMeasure(tree, true)).contains(key)
   }
   // Ensures the postcondition aligns with the actual content of the tree
 
@@ -315,7 +315,7 @@ object BPlusTreeVerification {
       !leaf.keys.contains(key) &&
       leaf.keys.size == ORDER && // Replaced 'order' with 'ORDER'
       // Add measure invariant requirement
-      insertMeasure(leaf) >= 0
+      insertMeasure(leaf, true) >= 0
       //&& !leaf.values.contains(value) // Ensure value is not already present
     )
     
@@ -340,7 +340,7 @@ object BPlusTreeVerification {
   }.ensuring(res => 
     res.isInstanceOf[Internal] &&
     isSorted(res.asInstanceOf[Internal].keys) &&
-    insertMeasure(res) >= 0
+    insertMeasure(res, true) >= 0
   )
 
   // Simplify balanceInternal preconditions
@@ -351,7 +351,7 @@ object BPlusTreeVerification {
       pos >= 0 && pos < node.children.size &&
       isSorted(node.keys) &&
       isValidTree(newChild, false) &&
-      insertMeasure(node) >= 0
+      insertMeasure(node, true) >= 0
     )
 
     newChild match {
@@ -515,26 +515,26 @@ object BPlusTreeVerification {
   // Add measure invariant
   def insertMeasurePositive(t: Tree): Boolean = {
     require(isValidTree(t, false)) // Ensure the tree is valid with ORDER
-    decreases(insertMeasure(t))
+    decreases(insertMeasure(t, true))
     t match {
-      case Leaf(_, _) => insertMeasure(t) >= BigInt("0")
+      case Leaf(_, _) => insertMeasure(t, true) >= BigInt("0")
       case Internal(_, children) => 
-        children.forall(c => insertMeasure(c) < insertMeasure(t) && insertMeasurePositive(c)) &&
-        insertMeasure(t) >= BigInt("0")
+        children.forall(c => insertMeasure(c, true) < insertMeasure(t, true) && insertMeasurePositive(c)) &&
+        insertMeasure(t, true) >= BigInt("0")
     }
-  }.ensuring(_ => insertMeasure(t) >= 0)
+  }.ensuring(_ => insertMeasure(t, true) >= 0)
 
   // Add helper lemma to support insertMeasurePositive
   @opaque
   def insertMeasureInvariant(t: Tree): Boolean = {
-    insertMeasure(t) >= 0 &&
+    insertMeasure(t, true) >= 0 &&
     (t match {
       case Leaf(_, _) => true
       case Internal(_, children) =>
-        children.forall(c => insertMeasure(c) < insertMeasure(t)) &&
-        children.nonEmpty && children.forall(c => insertMeasure(c) <= insertMeasure(t))
+        children.forall(c => insertMeasure(c, true) < insertMeasure(t, true)) &&
+        children.nonEmpty && children.forall(c => insertMeasure(c, true) <= insertMeasure(t, true))
     })
-  }.ensuring(res => insertMeasure(t) >= 0)
+  }.ensuring(res => insertMeasure(t, true) >= 0)
 
   // Add helper lemma for sorted lists
   def sortedListTransitive(l: List[BigInt]): Boolean = {

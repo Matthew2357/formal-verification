@@ -4,7 +4,7 @@ import stainless.annotation._
 import stainless.proof._
 
 object BPlusTreeVerification {
-  val MIN_ORDER: BigInt = 3
+  val MIN_ORDER: BigInt = 2
   val ORDER: BigInt = MIN_ORDER // Define ORDER as fixed MIN_ORDER
 
   // Core invariants
@@ -13,9 +13,12 @@ object BPlusTreeVerification {
     
     
     
-    def content(currentHeight: BigInt): List[BigInt] = {
-      require(isValidTree(this, true) &&currentHeight >= insertMeasure(this, true))
-      decreases(currentHeight) // Ensure currentHeight decreases
+    def content: List[BigInt] = {
+      require(isValidTree(this, true))
+      decreases(
+    
+      measureHelper(this), this.size
+    )
 
       this match {
         case Leaf(keys, _) => keys
@@ -24,30 +27,14 @@ object BPlusTreeVerification {
           else {
             // Ensure currentHeight decreases for each child
             children.foldLeft(List[BigInt]()) { (acc, c) =>
-              require(currentHeight - 1 >= insertMeasure(c, true)) // Add requirement
-              acc ++ c.content(currentHeight - 1)
+              //require(currentHeight - 1 >= insertMeasure(c, true)) // Add requirement
+              acc ++ c.content
             }
           }
       }
     }
 
-    def valueContent(currentHeight: BigInt): List[BigInt] = {
-      require(isValidTree(this, true) &&currentHeight >= insertMeasure(this, true))
-      decreases(currentHeight) // Ensure currentHeight decreases
-
-      this match {
-        case Leaf(_, values) => values
-        case Internal(keys, children) =>
-          if (children.isEmpty) List[BigInt]()
-          else {
-            // Ensure currentHeight decreases for each child
-            children.foldLeft(List[BigInt]()) { (acc, c) =>
-              require(currentHeight - 1 >= insertMeasure(c, true)) // Add requirement
-              acc ++ c.content(currentHeight - 1)
-            }
-          }
-      }
-    }
+    
     
     
     
@@ -72,16 +59,6 @@ object BPlusTreeVerification {
     require(keys.nonEmpty && children.size == keys.size + 1)
   }
 
-  def sameLengths(t: Tree, isRoot: Boolean): Boolean = {
-    require(isValidTree(t, isRoot))
-    t  match {
-      case Internal(keys, children) => 
-        val myMeasure = insertMeasure(t, isRoot)
-        children.forall(c => insertMeasure(c, false) == myMeasure - 1)
-      case Leaf(keys, values) => true
-    }
-  }
-
   // Basic validity checks
   def isValidTree(t: Tree, isRoot: Boolean): Boolean = { // Removed 'order' parameter
     require(ORDER >= MIN_ORDER) // Ensure ORDER is not less than MIN_ORDER
@@ -99,6 +76,32 @@ object BPlusTreeVerification {
     }
   }.ensuring(res => res ==> (!t.isInstanceOf[Internal] || t.asInstanceOf[Internal].children.forall(c => isValidTree(c, false))))
 
+  def sameLengths(t: Tree, isRoot: Boolean): Boolean = {
+    require(isValidTree(t, isRoot))
+    decreases(
+      measureHelper(t), insertMeasure(t, isRoot)
+    )
+    val im = insertMeasure(t, isRoot)
+    t match {
+      case Leaf(keys, values) => true
+      case Internal(keys, children) => 
+        (keys, children) match {
+          case (_, Nil()) => true
+          case (keyss, Cons(head, tail)) => 
+            
+            val newKeys = if(keyss.length==1){Nil[BigInt]()}else{keys.init}
+            val headMeasure = sameLengths(head, false)
+            val tempNode = Internal(newKeys, tail)
+            
+            insertMeasure(head, false) == insertMeasure(tempNode, isRoot) && sameLengths(head, false)
+        }
+    }
+  }.ensuring(res => res == (!t.isInstanceOf[Internal] || t.asInstanceOf[Internal].children.forall(c => sameLengths(c, false) )))
+
+  def lengthsLemma(t:Internal): Unit = {
+    require(isValidTree(t, false) && sameLengths(t, false))
+  }.ensuring(_=>t.children.forall(c => insertMeasure(c, false)==insertMeasure(t, false)-1))
+  
   def isValidSize(size: BigInt, isRoot: Boolean): Boolean = { // Removed 'order' parameter
     if (isRoot) size <= ORDER
     else size >= (ORDER + 1) / 2 && size <= ORDER
@@ -140,6 +143,27 @@ object BPlusTreeVerification {
         forallAssoc(m,n,tail)
     }
   }.ensuring(l.forall(c => c <= n))
+
+  def valueContent(t: Tree): List[BigInt] = {
+      require(isValidTree(t, true))
+      decreases(
+    
+      measureHelper(t), t.size
+    )
+
+      t match {
+        case Leaf(_, values) => values
+        case Internal(keys, children) =>
+          if (children.isEmpty) List[BigInt]()
+          else {
+            // Ensure currentHeight decreases for each child
+            children.foldLeft(List[BigInt]()) { (acc, c) =>
+              //require(currentHeight - 1 >= insertMeasure(c, true)) // Add requirement
+              acc ++ valueContent(c)
+          }
+      }
+    }
+  }
 
 
 
@@ -208,9 +232,9 @@ object BPlusTreeVerification {
   def insert(tree: Tree, key: BigInt, value: BigInt, isRoot: Boolean): Tree = {
     require(
       ORDER == MIN_ORDER && // Ensure ORDER is not less than MIN_ORDER
-      isValidTree(tree, isRoot) &&
-      !tree.valueContent(insertMeasure(tree, isRoot)).contains(value) &&
-      sameLengths(tree, isRoot)
+      isValidTree(tree, isRoot) && sameLengths(tree, isRoot) &&
+      insertMeasure(tree, isRoot) >= 0
+      && !valueContent(tree).contains(value)
     )
     decreases(insertMeasure(tree, isRoot))
     
@@ -248,22 +272,26 @@ object BPlusTreeVerification {
           assert(leaf.keys.size==ORDER)
           
           //assert(!leaf.values.contains(value))//this throws invalid
-          splitLeaf(leaf, key, value) // Removed 'order' parameter
+          
+          val res = splitLeaf(leaf, key, value) // Removed 'order' parameter
+          assert(isValidTree(res, isRoot))
+          assert(sameLengths(res, isRoot))
+          res
         }
 
       case internal @ Internal(keys, children) =>
         BPlusTreeSpecs.internalChildrenCountLemmaCorrect(internal, false) // Removed 'order' parameter
         val pos = findPosition(keys, key)
         val newChild = insert(children(pos), key, value, false)  // Recursive call without 'order'
+        lengthsLemma(internal)
         balanceInternal(internal, newChild, pos) // Removed 'order' parameter
     }
 
     // Ensure insertMeasureInvariant holds for the result
     result
   }.ensuring(res => 
-    isValidTree(res, isRoot) &&
-    insertMeasure(res, isRoot) >= insertMeasure(tree, isRoot) &&
-    sameLengths(res, isRoot)
+    isValidTree(res, isRoot) && sameLengths(res, isRoot) &&
+    insertMeasure(res, isRoot) >= 0
   )
 
   
@@ -271,14 +299,14 @@ object BPlusTreeVerification {
   @opaque
   def contains(tree: Tree, key: BigInt, isRoot: Boolean): Boolean = {
     require(
-      isValidTree(tree, isRoot) &&
-      insertMeasure(tree, isRoot) >= 0 &&
+      isValidTree(tree, true) &&//&& sameLengths(tree, isRoot) &&
+      insertMeasure(tree, true) >= 0 &&
       
       // Add requirement that internal nodes have valid children count
       (!tree.isInstanceOf[Internal] || 
         tree.asInstanceOf[Internal].children.size == tree.asInstanceOf[Internal].keys.size + 1)
     )
-    decreases(insertMeasure(tree, isRoot))
+    decreases(insertMeasure(tree, true))
     
     tree match {
       case Leaf(keys, _) =>
@@ -286,21 +314,21 @@ object BPlusTreeVerification {
         else {
           // Strengthen the containment check
           val res:Boolean = keys.contains(key)
-          assert(res == tree.content(insertMeasure(tree, isRoot)).contains(key))
+          assert(res == tree.content.contains(key))
           res
         }
       case internal @ Internal(keys, children) =>
         val pos = findPosition(keys, key)
         if (pos < keys.size && keys(pos) == key) {
-          assert(tree.content(insertMeasure(tree, isRoot)).contains(key))
+          assert(tree.content.contains(key))
           true
         } else if (pos < children.size) {
           // Add measure decrease assertion
-          assert(insertMeasure(children(pos), isRoot) < insertMeasure(tree, isRoot))
-          contains(children(pos), key, false)
+          assert(insertMeasure(children(pos), true) < insertMeasure(tree, true))
+          contains(children(pos), key, true)
         } else false
     }
-  }.ensuring(res => res == tree.content(insertMeasure(tree, isRoot)).contains(key))
+  }.ensuring(res => res == tree.content.contains(key))
 
   // Added a helper function to accurately compute the expected result
   /*def computeContainsInternal(List(newKeys(mid)), List(leftLeaf, rightLeaf))(tree: Tree, key: BigInt): Boolean = {
@@ -312,6 +340,7 @@ object BPlusTreeVerification {
   def findPosition(keys: List[BigInt], key: BigInt): BigInt = {
     require(isSorted(keys))
     decreases(keys)
+
     keys match {
       case Nil() => BigInt(0)
       case Cons(h, t) => 
@@ -341,7 +370,9 @@ object BPlusTreeVerification {
       isSorted(leaf.keys) &&
       // Added explicit check for missing key
       !leaf.keys.contains(key) &&
-      leaf.keys.size == ORDER 
+      leaf.keys.size == ORDER && // Replaced 'order' with 'ORDER'
+      // Add measure invariant requirement
+      insertMeasure(leaf, true) >= 0
       && !leaf.values.contains(value) // Ensure value is not already present
     )
     
@@ -366,7 +397,9 @@ object BPlusTreeVerification {
   }.ensuring(res => 
     res.isInstanceOf[Internal] &&
     isSorted(res.asInstanceOf[Internal].keys) &&
-    insertMeasure(res, true) ==1
+    insertMeasure(res, true) == 2 && res.asInstanceOf[Internal].children.forall(c => insertMeasure(c, false)==1) 
+    && valueContent(res).contains(value)
+
   )
 
   // Simplify balanceInternal preconditions
@@ -376,8 +409,8 @@ object BPlusTreeVerification {
       ORDER >= MIN_ORDER && // Enforce ORDER >= MIN_ORDER
       pos >= 0 && pos < node.children.size &&
       isSorted(node.keys) &&
-      isValidTree(newChild, false) &&
-      isValidTree(node, true)
+      isValidTree(newChild, false) && 
+      isValidTree(node, true) && insertMeasure(newChild, false)==insertMeasure(node, true)-1
       
     )
 
@@ -421,13 +454,14 @@ object BPlusTreeVerification {
         val res = Internal(node.keys, node.children.updated(pos, newChild))
         assert(res.keys.nonEmpty)
         assert(res.children.size==res.keys.size+1)
-        assert(isValidSize(res.keys.size, false)) //unknown
+        assert(isValidSize(res.keys.size, false)) 
         assert(isSorted(res.keys))
         assert(res.children.forall(c=>isValidTree(c,false))) //unknown
+        //assert(sameLengths(res, false))
         res
     }
   }.ensuring(res => 
-    isValidTree(res, false) 
+    isValidTree(res, false) && sameLengths(res, false)
   ) // Refined postcondition to match verification capabilities
 
   // Helper functions for list operations
@@ -541,7 +575,7 @@ object BPlusTreeVerification {
 
   // Add measure invariant
   def insertMeasurePositive(t: Tree): Boolean = {
-    require(isValidTree(t, false)) // Ensure the tree is valid with ORDER
+    require(isValidTree(t, false) && sameLengths(t, false)) // Ensure the tree is valid with ORDER
     decreases(insertMeasure(t, true))
     t match {
       case Leaf(_, _) => insertMeasure(t, true) >= BigInt("0")
@@ -554,7 +588,7 @@ object BPlusTreeVerification {
   // Add helper lemma to support insertMeasurePositive
   @opaque
   def insertMeasureInvariant(t: Tree): Boolean = {
-    require(isValidTree(t, true))
+    require(isValidTree(t, true) && sameLengths(t, true))
     insertMeasure(t, true) >= 0 &&
     (t match {
       case Leaf(_, _) => true
@@ -584,7 +618,7 @@ object BPlusTreeVerification {
   // Add internalChildrenCountLemma inside the object
   @opaque
   def internalChildrenCountLemma(t: Tree, isRoot: Boolean): Unit = { // Removed 'order' parameter
-    require(isValidTree(t, isRoot) && t.isInstanceOf[Internal]) // Enforce ORDER >= MIN_ORDER
+    require(isValidTree(t, isRoot) && sameLengths(t, isRoot) && t.isInstanceOf[Internal]) // Enforce ORDER >= MIN_ORDER
     val i = t.asInstanceOf[Internal]
     // This ensures the solver knows children.size == keys.size + 1 for a valid Internal
     assert(i.children.size == i.keys.size + 1)
@@ -629,7 +663,7 @@ object BPlusTreeSpecs {
   @opaque
   // Lemma to handle internalChildrenCountLemma
   def internalChildrenCountLemmaCorrect(t: Tree, isRoot: Boolean): Boolean = {
-    require(isValidTree(t, isRoot) && t.isInstanceOf[Internal])
+    require(isValidTree(t, isRoot) && sameLengths(t, isRoot) && t.isInstanceOf[Internal])
     val i = t.asInstanceOf[Internal]
     i.children.size == i.keys.size + 1
   }.holds

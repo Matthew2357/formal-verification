@@ -207,7 +207,7 @@ object BPlusTreeVerification {
         }
 
       case internal @ Internal(keys, children) =>
-        BPlusTreeSpecs.internalChildrenCountLemmaCorrect(internal, false) // Removed 'order' parameter
+        internalChildrenCountLemmaCorrect(internal, false) // Removed 'order' parameter
         val pos = findPosition(keys, key)
         val newChild = insert(children(pos), key, value, false)  // Recursive call without 'order'
         lengthsLemma(internal)
@@ -393,184 +393,6 @@ object BPlusTreeVerification {
     res.size == keys.size + 1
   )
 
-  // Add orderedSpread_emptyLeft before insertOrderPreservation
-  def orderedSpread_emptyLeft(x: BigInt, l2: List[BigInt]): Boolean = {
-    require(isSorted(l2) && !l2.contains(x))
-    l2.isEmpty || x < l2.head
-  }.ensuring(res => 
-    res ==> isSorted(List(x) ++ l2)
-  )
-
-  // Verification lemmas
-  // Strengthen insertOrderPreservation
-  def insertOrderPreservation(keys: List[BigInt], key: BigInt): Boolean = {
-    require(
-      isSorted(keys) && 
-      !keys.contains(key)
-    )
-    decreases(keys)
-    keys match {
-      case Nil() => true
-      case Cons(h, t) => 
-        if (key < h) orderedSpread_emptyLeft(key, keys)
-        else insertOrderPreservation(t, key)
-    }
-  }.ensuring(_ => 
-    isSorted(insertIntoSorted(keys, key)) && 
-    !keys.contains(key)
-  )
-
-  @opaque
-  def splitPreservation(keys: List[BigInt], at: BigInt): Boolean = {
-    require(isSorted(keys) && at >= 0 && at < keys.size)
-    decreases(keys)
-    
-    val (left, right) = (keys.take(at), keys.drop(at))
-    isSorted(left) && isSorted(right) &&
-    left.forall(k => right.forall(k < _))
-  }.ensuring(_ => true)
-
-  @opaque
-  def mergePreservation(l1: List[BigInt], l2: List[BigInt]): Boolean = {
-    require(
-      isSorted(l1) && isSorted(l2) &&
-      l1.forall(k1 => l2.forall(k2 => k1 < k2))
-    )
-    decreases(l1)
-    l1 match {
-      case Nil() => true
-      case Cons(h, t) => mergePreservation(t, l2)
-    }
-  }.ensuring(_ => isSorted(l1 ++ l2))
-
-  def listInvariants(keys: List[BigInt]): Boolean = {
-    keys.size >= 0 && isSorted(keys)
-  }
-
-  def splitInvariants(keys: List[BigInt], at: BigInt): Boolean = {
-    require(at >= 0 && at < keys.size && listInvariants(keys))
-    val left = keys.take(at)
-    val right = keys.drop(at)
-    listInvariants(left) && listInvariants(right) &&
-    left.size == at &&
-    right.size == keys.size - at &&
-    (left.isEmpty || right.isEmpty || left.last < right.head)
-  }
-
-  // Add helper for key distribution
-  def keyDistributionLemma(keys: List[BigInt], at: BigInt, key: BigInt): Boolean = {
-    require(
-      isSorted(keys) && 
-      !keys.contains(key) &&
-      at >= 0 && at <= keys.size
-    )
-    decreases(keys)
-    
-    val newKeys = insertIntoSorted(keys, key)
-    val pos = findPosition(keys, key)
-    
-    val (left, right) = (newKeys.take(at), newKeys.drop(at + 1))
-    val x = newKeys(at)
-
-    if (left.nonEmpty && right.nonEmpty) {
-      true
-    } else if (left.nonEmpty) {
-      true
-    } else if (right.nonEmpty) {
-      true
-    } else {
-      true
-    }
-
-    true
-  }.ensuring(_ == true)
-
-  // Add measure invariant
-  def insertMeasurePositive(t: Tree): Boolean = {
-    require(isValidTree(t, false) && sameLengths(t, false)) // Ensure the tree is valid with ORDER
-    decreases(insertMeasure(t, true))
-    t match {
-      case Leaf(_, _) => insertMeasure(t, true) >= BigInt("0")
-      case Internal(_, children) => 
-        children.forall(c => insertMeasure(c, true) < insertMeasure(t, true) && insertMeasurePositive(c)) &&
-        insertMeasure(t, true) >= BigInt("0")
-    }
-  }.ensuring(_ => insertMeasure(t, true) >= 0)
-
-  // Add helper lemma to support insertMeasurePositive
-  @opaque
-  def insertMeasureInvariant(t: Tree): Boolean = {
-    require(isValidTree(t, true) && sameLengths(t, true))
-    insertMeasure(t, true) >= 0 &&
-    (t match {
-      case Leaf(_, _) => true
-      case Internal(_, children) =>
-        children.forall(c => insertMeasure(c, true) < insertMeasure(t, true)) &&
-        children.nonEmpty && children.forall(c => insertMeasure(c, true) <= insertMeasure(t, true))
-    })
-  }.ensuring(res => insertMeasure(t, true) >= 0)
-
-  // Add helper lemma for sorted lists
-  def sortedListTransitive(l: List[BigInt]): Boolean = {
-    require(isSorted(l))
-    decreases(l)
-    l.match {
-      case Nil() => true
-      case Cons(_, Nil()) => true
-      case Cons(x, xs @ Cons(y, ys)) =>
-        x < y && sortedListTransitive(xs)
-    }
-  }.ensuring(_ => 
-    l.match {
-      case Cons(x, xs @ Cons(y, _)) => x < y && isSorted(xs)
-      case _ => true
-    }
-  )
-
-  // Add internalChildrenCountLemma inside the object
-  @opaque
-  def internalChildrenCountLemma(t: Tree, isRoot: Boolean): Unit = { // Removed 'order' parameter
-    require(isValidTree(t, isRoot) && sameLengths(t, isRoot) && t.isInstanceOf[Internal]) // Enforce ORDER >= MIN_ORDER
-    val i = t.asInstanceOf[Internal]
-    // This ensures the solver knows children.size == keys.size + 1 for a valid Internal
-    assert(i.children.size == i.keys.size + 1)
-  }.ensuring(_ => t.asInstanceOf[Internal].children.size == t.asInstanceOf[Internal].keys.size + 1)
-}
-
-// Helper specs object similar to RedBlackTreeSpecs
-object BPlusTreeSpecs {
-  import BPlusTreeVerification._ // Import definitions from main object
-
-  def orderedSpread(l1: List[BigInt], x: BigInt, l2: List[BigInt]): Boolean = {
-    require(isSorted(l1) && isSorted(l2))
-    
-    // Fix the conditions for ordered spread
-    val allLessThan = l1.forall(_ < x) 
-    val allGreaterThan = l2.forall(x < _)
-    val nonempty = l1.isEmpty || l2.isEmpty || (l1.last < x && x < l2.head)
-    
-    // Add helper assertions
-    if (allLessThan && allGreaterThan && nonempty) {
-      sortedListTransitive(l1)
-      sortedListTransitive(l2)
-      //assert(isSorted(l1 ++ List(x) ++ l2))
-    }
-    
-    
-    (allLessThan && allGreaterThan && nonempty) ==> isSorted(l1 ++ List(x) ++ l2)
-  }.ensuring(_ => true) // Weaken postcondition to ensure verification
-
-  @opaque
-  def insertPreservesOrder(list: List[BigInt], x: BigInt): Boolean = {
-    require(isSorted(list) && !list.contains(x))
-    decreases(list)
-    list.match {
-      case Nil() => true
-      case Cons(h, t) => 
-        if (x < h) orderedSpread_emptyLeft(x, list)
-        else insertPreservesOrder(t, x)
-    }
-  }.holds
 
   @opaque
   // Lemma to handle internalChildrenCountLemma
@@ -580,19 +402,11 @@ object BPlusTreeSpecs {
     i.children.size == i.keys.size + 1
   }.holds
 
-  // Add helper lemma for list invariants
-  @opaque
-  def sortedListInvariants(l: List[BigInt]): Boolean = {
-    require(isSorted(l))
-    l.match {
-      case Nil() => true
-      case Cons(h, t) => t.isEmpty || (h < t.head && sortedListInvariants(t))
-    }
-  }.ensuring(_ => 
-    l.isEmpty || 
-    l.tail.isEmpty || 
-    l.head < l.tail.head
-  )
+  
+  
+
 }
 
-//RECORD
+
+
+

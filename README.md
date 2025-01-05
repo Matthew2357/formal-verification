@@ -1,5 +1,5 @@
-# formal-verification
-Verify shit formally
+# Formal Verification project
 
-To use stainless, do ```stainless bplus_stainless.scala``` ==> this verifies that our proofs are correct.\
-Unit tests are in Test/tests.scala. To run those, use ```scala-cli . Test```
+In this project we implement insertion on a B+ Tree in Scala, which we then verify using Stainless. 
+
+To run, use the command  ```stainless bplus_insert_verification.scala```. It takes about 3 minutes to run.

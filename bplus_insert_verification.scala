@@ -4,14 +4,11 @@ import stainless.annotation._
 import stainless.proof._
 
 object BPlusTreeVerification {
-  val MIN_ORDER: BigInt = 2
+  val MIN_ORDER: BigInt = 3
   val ORDER: BigInt = MIN_ORDER // Define ORDER as fixed MIN_ORDER
 
   // Core invariants
   sealed abstract class Tree {
-
-    
-    
     
     def content: List[BigInt] = {
       require(isValidTree(this, true))
@@ -34,12 +31,6 @@ object BPlusTreeVerification {
       }
     }
 
-    
-    
-    
-    
-    
-    
     def size: BigInt = {
       
       this match {
@@ -49,8 +40,6 @@ object BPlusTreeVerification {
   }.ensuring(res => res >= 0)
 
   }
-
-  
 
   case class Leaf(keys: List[BigInt], values: List[BigInt]) extends Tree {
     require(keys.size == values.size) // Ensures keys and values are always in sync
@@ -116,33 +105,6 @@ object BPlusTreeVerification {
     }
   }
 
-  @opaque
-  def maxOfList(xs: List[BigInt]): BigInt = {
-    require(xs.nonEmpty)
-    decreases(xs)
-    xs match {
-      case Cons(h, Nil()) => h
-      case Cons(h, t) =>
-        val mt = maxOfList(t)
-        if (h > mt) {
-          assert(t.forall(c => c <= mt))
-          forallAssoc(mt, h, t)
-          assert(t.forall(c => c <= h))
-          h
-        }
-         else{mt}
-    }
-  }.ensuring(res => xs.forall(c => c <= res))
-
-  def forallAssoc(m: BigInt, n:BigInt ,l: List[BigInt]): Unit = {
-    require(n >= m && l.forall(c => c <= m))
-    l match {
-      case Nil() => ()
-      case Cons(head, tail) => 
-        assert(head <= n)
-        forallAssoc(m,n,tail)
-    }
-  }.ensuring(l.forall(c => c <= n))
 
   def valueContent(t: Tree): List[BigInt] = {
       require(isValidTree(t, true))
@@ -167,36 +129,11 @@ object BPlusTreeVerification {
 
 
 
-  def treeHeight(t: Tree): BigInt = {
-    t match {
-      case Leaf(_, _) => 1
-      case Internal(keys, children) =>
-        if (keys.nonEmpty && children.size == keys.size + 1) {
-          1 + (if (children.isEmpty) BigInt(0) else maxOfList(children.map(treeHeight)))
-        } else {
-          0
-        }
-    }
-  }
 
-  // Core insert operation
   // Add custom max function for BigInt
   def max(x: BigInt, y: BigInt): BigInt = {
     if (x > y) x else y
   }
-
-  def oldMeasure(t: Tree): BigInt = {
-    
-    t match {
-      case Leaf(_, _) => BigInt(1) // Ensure literal is BigInt
-      case Internal(_, children) => 
-        if(children.nonEmpty){
-        
-        BigInt(1) + maxOfList(children.map(oldMeasure))
-        }else{BigInt(1)}
-    }
-  }.ensuring(res => res >= BigInt(1)
-  && (!t.isInstanceOf[Internal] || maxOfList(t.asInstanceOf[Internal].children.map(oldMeasure)) < res)) // Ensuring measure is always positive
 
   def insertMeasure(t: Tree, isRoot: Boolean): BigInt = {
   require(isValidTree(t, isRoot))
@@ -228,7 +165,7 @@ object BPlusTreeVerification {
   }
 
 
-  // Ensure internalChildrenCountLemma is only called on valid Internal trees
+  
   def insert(tree: Tree, key: BigInt, value: BigInt, isRoot: Boolean): Tree = {
     require(
       ORDER == MIN_ORDER && // Ensure ORDER is not less than MIN_ORDER
@@ -242,27 +179,17 @@ object BPlusTreeVerification {
       case leaf @ Leaf(keys, values) =>
         // Added check for empty Leaf
         if (!keys.isEmpty) {
-          //preconditions for contains
-          /* 
-          require(
-      insertMeasure(tree) >= 0 &&
-      insertMeasureInvariant(tree) &&
-      isValidTree(tree, false) &&
-      // Add requirement that internal nodes have valid children count
-      (!tree.isInstanceOf[Internal] || 
-        tree.asInstanceOf[Internal].children.size == tree.asInstanceOf[Internal].keys.size + 1)
-    )
-           */
+          
           assert(insertMeasure(leaf, isRoot) >= 0)
           
-          //assert(isValidTree(leaf, false)) //this throws invalid
+         
           
         }
         if (keys.isEmpty) {
           insertIntoLeaf(leaf, key, value)
         } else if (contains(leaf, key, isRoot)) {
           leaf
-        } else if (keys.size < ORDER) { // Replaced 'order' with 'ORDER'
+        } else if (keys.size < ORDER) { 
           
           insertIntoLeaf(leaf, key, value)
         } else {
@@ -271,7 +198,7 @@ object BPlusTreeVerification {
           assert(!leaf.keys.contains(key))
           assert(leaf.keys.size==ORDER)
           
-          //assert(!leaf.values.contains(value))//this throws invalid
+          
           
           val res = splitLeaf(leaf, key, value) // Removed 'order' parameter
           assert(isValidTree(res, isRoot))
@@ -331,9 +258,7 @@ object BPlusTreeVerification {
   }.ensuring(res => res == tree.content.contains(key))
 
   // Added a helper function to accurately compute the expected result
-  /*def computeContainsInternal(List(newKeys(mid)), List(leftLeaf, rightLeaf))(tree: Tree, key: BigInt): Boolean = {
-    tree.content(insertMeasure(tree, true)).contains(key)
-  }*/
+  
   // Ensures the postcondition aligns with the actual content of the tree
 
   // Make findPosition public
@@ -437,32 +362,19 @@ object BPlusTreeVerification {
           )
         }
       case _ =>
-        /* 
-        t match {
-      case Leaf(keys, values) => 
-        keys.size == values.size &&
-        isValidSize(keys.size, isRoot) &&
-        isSorted(keys)
-      case Internal(keys, children) =>
-        keys.nonEmpty &&
-        children.size == keys.size + 1 &&
-        isValidSize(keys.size, isRoot) &&
-        isSorted(keys) &&
-        children.forall(c => isValidTree(c, false))
-    }
-         */
+        
         val res = Internal(node.keys, node.children.updated(pos, newChild))
         assert(res.keys.nonEmpty)
         assert(res.children.size==res.keys.size+1)
         assert(isValidSize(res.keys.size, false)) 
         assert(isSorted(res.keys))
-        assert(res.children.forall(c=>isValidTree(c,false))) //unknown
-        //assert(sameLengths(res, false))
+        assert(res.children.forall(c=>isValidTree(c,false))) 
+        
         res
     }
   }.ensuring(res => 
     isValidTree(res, false) && sameLengths(res, false)
-  ) // Refined postcondition to match verification capabilities
+  ) 
 
   // Helper functions for list operations
   // Make insertIntoSorted public

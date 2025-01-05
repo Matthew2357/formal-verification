@@ -72,6 +72,16 @@ object BPlusTreeVerification {
     require(keys.nonEmpty && children.size == keys.size + 1)
   }
 
+  def sameLengths(t: Tree, isRoot: Boolean): Boolean = {
+    require(isValidTree(t, isRoot))
+    t  match {
+      case Internal(keys, children) => 
+        val myMeasure = insertMeasure(t, isRoot)
+        children.forall(c => insertMeasure(c, false) == myMeasure - 1)
+      case Leaf(keys, values) => true
+    }
+  }
+
   // Basic validity checks
   def isValidTree(t: Tree, isRoot: Boolean): Boolean = { // Removed 'order' parameter
     require(ORDER >= MIN_ORDER) // Ensure ORDER is not less than MIN_ORDER
@@ -199,8 +209,8 @@ object BPlusTreeVerification {
     require(
       ORDER == MIN_ORDER && // Ensure ORDER is not less than MIN_ORDER
       isValidTree(tree, isRoot) &&
-      insertMeasure(tree, isRoot) >= 0 &&
-      !tree.valueContent(insertMeasure(tree, isRoot)).contains(value)
+      !tree.valueContent(insertMeasure(tree, isRoot)).contains(value) &&
+      sameLengths(tree, isRoot)
     )
     decreases(insertMeasure(tree, isRoot))
     
@@ -252,7 +262,8 @@ object BPlusTreeVerification {
     result
   }.ensuring(res => 
     isValidTree(res, isRoot) &&
-    insertMeasure(res, isRoot) >= 0
+    insertMeasure(res, isRoot) >= insertMeasure(tree, isRoot) &&
+    sameLengths(res, isRoot)
   )
 
   
@@ -330,9 +341,7 @@ object BPlusTreeVerification {
       isSorted(leaf.keys) &&
       // Added explicit check for missing key
       !leaf.keys.contains(key) &&
-      leaf.keys.size == ORDER && // Replaced 'order' with 'ORDER'
-      // Add measure invariant requirement
-      insertMeasure(leaf, true) >= 0
+      leaf.keys.size == ORDER 
       && !leaf.values.contains(value) // Ensure value is not already present
     )
     
@@ -357,7 +366,7 @@ object BPlusTreeVerification {
   }.ensuring(res => 
     res.isInstanceOf[Internal] &&
     isSorted(res.asInstanceOf[Internal].keys) &&
-    insertMeasure(res, true) >= 0
+    insertMeasure(res, true) ==1
   )
 
   // Simplify balanceInternal preconditions
